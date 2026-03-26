@@ -1,0 +1,20 @@
+# R / RStudio
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# OS
+.DS_Store
+
+# Databases
+*.duckdb
+*.sqlite
+
+# Data files (you’ve said none should be committed)
+*.csv
+*.xlsx
+*.rds
+
+# Secrets
+.env
