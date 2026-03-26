@@ -1,16 +1,12 @@
-mainUI <- function(id) {
-  ns <- NS(id)
-  tagList(
-  h1('helloe world')
+appUI <- function(id) {
+  tabItems(
+    tabItem("tab_dashboard", ""),
+    tabItem("tab_settings",  "")
   )
 }
 
-nameServer <- function(id) {
-  moduleServer(
-    id,
-    function(input, output, session) {
-      return(NULL)
-    }
-  )
+appServer <- function(id, auth_state) {
+  moduleServer(id, function(input, output, session) {
+    # child modules go here
+  })
 }
-
