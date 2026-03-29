@@ -9,6 +9,18 @@ library(shiny)
 library(bs4Dash)
 library(waiter)
 library(shinyFeedback)
+library(shinyjs)
+library(waiter)
+library(reactable)
+
+# ==============================================================================
+# SOURCE UTILS
+# ==============================================================================
+source("R/utils/auth.r")
+source("R/utils/add_study_arm.r")
+source("R/utils/pipeline_fixed.r")
+source("R/utils/posting_test.r")
+source("R/utils/template_build_main.r")
 
 # ==============================================================================
 # GLOBAL CONFIGURATION & INITIALIZATION

@@ -1,6 +1,7 @@
-lloginUI <- function(id) {
+loginUI <- function(id) {
   ns <- NS(id)
   div(
+    id = "login-overlay",
     class = "login-screen",
     div(
       class = "login-card-shell",
@@ -24,7 +25,8 @@ lloginUI <- function(id) {
 
 loginServer <- function(id) {
   moduleServer(id, function(input, output, session) {
-    
+    ns <- NS(id)
+  
     auth_state <- reactiveValues(
       logged_in = FALSE,
       user_id   = NULL,

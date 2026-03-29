@@ -2,8 +2,6 @@
 # SETUP & AUTHENTICATION
 # ==============================================================================
 source("R/utils/auth.r", local = FALSE)
-getwd()
-file.exists("R/utils/auth.r")
 
 # ==============================================================================
 # 01_BUILD_RULES_DB_AH.R
@@ -21,6 +19,49 @@ init_db <- function() {
   })
 }
 
+## ICT Cost data  --------------------------------------------------------------
+ict_table <- function() {
+  query <- c("
+     CREATE TABLE IF NOT EXISTS ict_costing_tbl (
+     CPMS_ID                VARCHAR,
+     Study                  VARCHAR,
+     Visit_Number           VARCHAR,
+     Study_Arm              VARCHAR,
+     Visit_Label            VARCHAR,
+     Activity_Name          VARCHAR,
+     ICT_Cost               DOUBLE,
+     Contract_Cost          DOUBLE,
+     activity_occurrence_id INTEGER,
+     staff_group            INTEGER
+     );"
+  )
+  
+  dbExecute(CON, query)
+}
+
+## App data --------------------------------------------------------------------
+meta_table <- function() {
+  # 1. Define Table Schema
+  query <- c(
+     "DROP TABLE IF EXISTS ict_uploads;
+      DROP TABLE IF EXISTS meta_data;    
+      CREATE SEQUENCE IF NOT EXISTS upload_id_seq;
+      CREATE TABLE IF NOT EXISTS meta_data (
+        id               INTEGER PRIMARY KEY DEFAULT nextval('upload_id_seq'),
+        scenario_id      VARCHAR,
+        edge_id          VARCHAR,
+        study_name       VARCHAR,
+        notes            VARCHAR,
+        uploaded_by      VARCHAR,
+        upload_timestamp TIMESTAMP DEFAULT current_timestamp,
+        original_filename VARCHAR,
+        saved_file_path  VARCHAR
+      );"
+  )
+  
+  dbExecute(CON, query)
+  message('meta built')
+}
 ## User tables -----------------------------------------------------------------
 user_tables <- function() {
   # 1. Define Table Schema
@@ -318,6 +359,8 @@ build_rules_tables <- function() {
 
 ## Main Entry Point ------------------------------------------------------------
 db_main <- function() {
+  ict_table()
+  meta_table()
   init_db()
   user_tables()
   seed_users()
