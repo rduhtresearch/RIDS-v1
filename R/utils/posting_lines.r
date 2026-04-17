@@ -534,6 +534,26 @@ generate_posting_plan <- function(ict,
   invisible(out)
 }
 
+prepare_posting_input <- function(ict,
+                                  scenario_id,
+                                  ruleset_id  = "COMM_AH_V1",
+                                  ict_db_path = NULL) {
+  
+  message("--- Reading ICT data ---")
+  df <- read_ict_workbook(ict)
+  
+  message("--- Normalising row context ---")
+  df <- normalise_rows(df, scenario_id, ruleset_id)
+  
+  if (!is.null(ict_db_path)) {
+    message("--- Joining ICT contract costs (corrected keys) ---")
+    df <- join_ict_costs(df, ict_db_path)
+  }
+  
+  message("--- Prepared posting input: ", nrow(df), " rows ---")
+  df
+}
+
 # -- CLI convenience -----------------------------------------------------------
 # Uncomment and set paths to run standalone:
 #

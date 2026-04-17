@@ -11,13 +11,22 @@ source("R/utils/posting_lines.r")
 # edge_templates         <- build_all_edge_templates(posting_lines_adjusted)
 
 
-#input_file <- '/Users/tategraham/Downloads/(59904) - AriBio - POLARIS-AD - Final to agree to CTA.xlsx'
-input_file <- '/Users/tategraham/Documents/NHS/R scripts/Refactor/testing_data/candy study.xlsx'
+input_file <- '/Users/tategraham/Downloads/(59904) - AriBio - POLARIS-AD - Final to agree to CTA.xlsx'
+# input_file <- '/Users/tategraham/Documents/NHS/R scripts/Refactor/testing_data/candy study.xlsx'
 
 pw <- process_workbook(
   input_path = input_file,
   db_path    = DB_DIR
 )
+
+prepare_posting_input(
+  ict = pw,
+  scenario_id = "A",
+  ict_db_path   = DB_DIR
+  
+)
+
+View(pw$`AR1001 Treatment phase`)
 
 out <- generate_posting_plan(
   ict           = pw,
@@ -25,6 +34,10 @@ out <- generate_posting_plan(
   scenario_id   = "A",
   ict_db_path   = DB_DIR
 )
+
+typeof(out)
+class(out)
+View(out)
 
 posting_lines_adjusted <- adjust_posting_lines(out)
 View(posting_lines_adjusted)

@@ -161,7 +161,7 @@ expand_to_visit_rows_legacy <- function(df, study_value, cpms_id, study_arm_valu
   total_occ[is.na(total_occ) | total_occ == 0] <- 1
   total_occ <- round(total_occ)
   
-  total_cost <- as.numeric(as.character(df[["Total.Activity.Cost"]]))
+  total_cost <- as.numeric(as.character(df[["Total"]]))
   cost_per_occ <- total_cost / total_occ
   
   out_list <- vector("list", nrow(df))

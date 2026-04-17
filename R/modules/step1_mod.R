@@ -24,6 +24,7 @@ step1_Server <- function(id, auth_state, shared_state) {
       ICT_UPLOAD_DIR <- "/Users/tategraham/Documents/NHS/ict_dir"
       
       observeEvent(input$next_step, {
+        shared_state$current_step <- "step2"
         shinyjs::runjs('$("[data-value=\'tab_step2\']").tab("show")')
         shinyjs::runjs("$('body').addClass('sidebar-collapse')")
       })
@@ -47,6 +48,15 @@ step1_Server <- function(id, auth_state, shared_state) {
         # Copy file to audit directory
         file.copy(input$upload$datapath, saved_path)
         
+        # Extract CPMS ID
+        extracted_cpms <- tryCatch({
+          extract_cpms_id(saved_path)
+        }, error = function(e) {
+           showNotification("Failed to extract CPMS ID", type = "error")
+           print(e)
+           return(NULL)
+        })
+        
         # Write metadata to DB
         DBI::dbExecute(CON,
                        "INSERT INTO meta_data 
@@ -63,6 +73,21 @@ step1_Server <- function(id, auth_state, shared_state) {
                        )
         )
         
+        # Process workbook (pipeline step 1)
+        shared_state$processed_ict <- tryCatch({
+          process_workbook(
+            input_path = saved_path,
+            db_path    = DB_DIR
+          )
+        }, error = function(e) {
+          showNotification("Failed to process workbook", type = "error")
+          print(e)
+          return(NULL)
+        })
+        
+        # Set system shared state variables
+        shared_state$cpms_id     <- extracted_cpms
+        shared_state$current_step <- "step1"
         shared_state$scenario_id  <- input$scenario
         shared_state$upload_meta  <- list(
           scenario_id = input$scenario,
@@ -74,7 +99,6 @@ step1_Server <- function(id, auth_state, shared_state) {
         
         
       })
-      
     }
   )
 }

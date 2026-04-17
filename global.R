@@ -5,13 +5,12 @@ library(DBI)
 library(duckdb)
 library(sodium)
 library(shiny)
-library(shiny)
 library(bs4Dash)
 library(waiter)
 library(shinyFeedback)
 library(shinyjs)
-library(waiter)
 library(reactable)
+library(DT)
 
 # ==============================================================================
 # SOURCE UTILS
@@ -20,7 +19,9 @@ source("R/utils/auth.r")
 source("R/utils/add_study_arm.r")
 source("R/utils/pipeline_fixed.r")
 source("R/utils/posting_test.r")
+source("R/utils/extract_cpms_id.r")
 source("R/utils/template_build_main.r")
+source("R/utils/posting_lines.r")
 
 # ==============================================================================
 # GLOBAL CONFIGURATION & INITIALIZATION

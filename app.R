@@ -5,6 +5,7 @@ source("R/modules/sidebar_mod.R")
 source("R/modules/app_mod.R")
 source("R/modules/step1_mod.R")
 source("R/modules/step2_mod.R")
+source("R/modules/step3_mod.R")
 
 ui <- tagList(
   tags$head(
@@ -12,10 +13,14 @@ ui <- tagList(
     tags$script(src = "app-shell.js")
   ),
   dashboardPage(
-    header = dashboardHeader(title = dashboardBrand(title = "RIDS")),
+    header = dashboardHeader(title = dashboardBrand(title = "RIDS | pre-alpha build")),
     sidebar = dashboardSidebar(
-      skin ='light',
-      collapsed = TRUE,
+      skin = "light",
+      collapsed = FALSE,
+      minified = FALSE,
+      expandOnHover = FALSE,
+      fixed = TRUE,
+      width = 250,
       sidebarUI("sidebar")
     ),
     body = dashboardBody(
