@@ -16,6 +16,9 @@ sidebarServer <- function(id, auth_state, parent_session) {
         menuItem("Study Library",  tabName = "tab_library",  icon = ionicon(name = "book")),
         menuItem("Settings",  tabName = "tab_settings",  icon = ionicon(name = "settings")),
         menuItem("Support",  tabName = "tab_support",  icon = ionicon(name = "help-buoy")),
+        if (auth_state$role == "admin") {
+          menuItem("Admin", tabName = "tab_admin", icon = icon("users-cog"))
+        },
         
         # step / workflow menu items (Hidden)
         tags$div(

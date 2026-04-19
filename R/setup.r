@@ -64,25 +64,35 @@ meta_table <- function() {
 }
 ## User tables -----------------------------------------------------------------
 user_tables <- function() {
-  # 1. Define Table Schema
   queries <- c(
+    "CREATE SEQUENCE IF NOT EXISTS user_id_seq;",
+    
     "CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY,
-      username TEXT UNIQUE,
+      id            INTEGER PRIMARY KEY DEFAULT nextval('user_id_seq'),
+      username      TEXT UNIQUE NOT NULL,
       password_hash TEXT,
-      role TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      role          TEXT NOT NULL DEFAULT 'user',
+      created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_login    TIMESTAMP
+    );",
+    
+    "CREATE TABLE IF NOT EXISTS tokens (
+      token         TEXT PRIMARY KEY,
+      user_id       INTEGER NOT NULL,
+      expires_at    TIMESTAMP NOT NULL,
+      used          BOOLEAN DEFAULT FALSE,
+      created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
     );"
   )
   
-  # 4. Execute queries
   tryCatch({
     for (query in queries) {
       dbExecute(CON, query)
     }
-    message("Database initialised successfully at ", DB_DIR)
+    message("User tables initialised")
   }, error = function(e) {
-    stop("Failed to initialise database: ", e$message)
+    stop("Failed to initialise user tables: ", e$message)
   })
 }
 
@@ -357,12 +367,33 @@ build_rules_tables <- function() {
   print(dbGetQuery(CON, "SELECT scenario_id, COUNT(*) AS n FROM routing_rules GROUP BY scenario_id ORDER BY scenario_id;"))
 }
 
+# temp (for admin account)
+bootstrap_admin <- function() {
+  count <- dbGetQuery(CON, "SELECT COUNT(*) AS n FROM users")$n
+  
+  if (count == 0) {
+    message("Bootstrapping admin user...")
+    
+    dbExecute(CON,
+              "INSERT INTO users (username, role) VALUES (?, ?)",
+              params = list("tate", "admin")
+    )
+    
+    user_id <- dbGetQuery(CON,
+                          "SELECT id FROM users WHERE username = 'tate'"
+    )$id
+    
+    token <- generate_token(user_id)
+    message("=== ADMIN TOKEN: ", token, " ===")
+  }
+}
+
 ## Main Entry Point ------------------------------------------------------------
 db_main <- function() {
   ict_table()
   meta_table()
   init_db()
   user_tables()
-  seed_users()
+  bootstrap_admin()
   build_rules_tables()
 }
