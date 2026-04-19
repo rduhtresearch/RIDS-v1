@@ -1,15 +1,18 @@
 appUI <- function(id) {
-  tabItems(
-    tabItem("tab_dashboard", ""),
-    tabItem("tab_settings",  ""),
-    tabItem("tab_step1", step1_UI(NS(id, "step1"))),
-    tabItem("tab_step2", step2_UI(NS(id, "step2"))),
-    tabItem("tab_step3", step3_UI(NS(id, "step3"))),
-    tabItem("tab_admin", adminUI("admin"))
+  tagList(
+    progressUI(NS(id, "progress")),
+    tabItems(
+      tabItem("tab_dashboard", ""),
+      tabItem("tab_settings",  ""),
+      tabItem("tab_step1", step1_UI(NS(id, "step1"))),
+      tabItem("tab_step2", step2_UI(NS(id, "step2"))),
+      tabItem("tab_step3", step3_UI(NS(id, "step3"))),
+      tabItem("tab_admin", adminUI("admin"))
+    )
   )
 }
 
-appServer <- function(id, auth_state) {
+appServer <- function(id, auth_state, current_step) {
   moduleServer(id, function(input, output, session) {
     
     step <- reactiveVal(0) 
@@ -28,9 +31,19 @@ appServer <- function(id, auth_state) {
       timestamp       = NULL
     )
     
-    step1_Server("step1", auth_state, shared_state)
-    step2_Server("step2", auth_state, shared_state)
-    step3_Server("step3", auth_state, shared_state)
+    step1_Server("step1", auth_state, shared_state, current_step)
+    step2_Server("step2", auth_state, shared_state, current_step)
+    step3_Server("step3", auth_state, shared_state, current_step)
+    progressServer("progress", current_step)
+    
+    observe({
+      current <- input$sidebar
+      if (!is.null(current) && current %in% c("tab_step1", "tab_step2", "tab_step3")) {
+        shared_state$current_step <- gsub("tab_", "", current)
+      } else {
+        shared_state$current_step <- NULL
+      }
+    })
     
     
   })

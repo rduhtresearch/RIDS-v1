@@ -1,9 +1,12 @@
 step3_UI <- function(id) {
   ns <- NS(id)
-  tagList(
-    div(
-      style = "display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;",
-      selectInput(ns("tag_select"),label = NULL, choices = c("TRAINING_FEE"),width = "200px"),
+  bs4Card(
+    title  = "Apply Tags",
+    width  = 12,
+    status = "primary",
+    solidHeader = FALSE,
+    footer = tagList(
+      selectInput(ns("tag_select"), label = NULL, choices = c("TRAINING_FEE"), width = "200px"),
       actionButton(ns("apply_tag"), "Apply Tag", class = "btn-primary"),
       actionButton(ns("save"), "Save", class = "btn-success")
     ),
@@ -11,7 +14,7 @@ step3_UI <- function(id) {
   )
 }
 
-step3_Server <- function(id, auth_state, shared_state) {
+step3_Server <- function(id, auth_state, shared_state, current_step) {
   moduleServer(
     id,
     function(input, output, session) {

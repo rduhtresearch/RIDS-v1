@@ -1,104 +1,112 @@
 step1_UI <- function(id) {
   ns <- NS(id)
-  div(
+  bs4Card(
+    title  = "Upload ICT Workbook",
+    width  = 6,
+    status = "primary",
+    solidHeader = FALSE,
     selectInput(ns('scenario'), 'Select Scenario', choices = c("A", "B")),
     textInput(ns('edge_id'), 'EDGE ID'),
     textInput(ns('study_name'), 'Study Name'),
-    fileInput(ns("upload"), "Choose CSV File",
+    fileInput(ns("upload"), "Choose Excel File",
               multiple = FALSE,
               accept = c(".xlsx")),
-    textAreaInput( 
-      ns("notes"), 
-      "Add upload notes", 
-    ),
-    actionButton(ns('next_step'), 'Step 2'),
-    
+    textAreaInput(ns("notes"), "Add upload notes"),
+    actionButton(ns('next_step'), 'Next: Review Costs', class = "btn-primary"),
+    helpUI(ns("help"))
   )
 }
 
-step1_Server <- function(id, auth_state, shared_state) {
-  moduleServer(
-    id,
-    function(input, output, session) {
+step1_Server <- function(id, auth_state, shared_state, current_step) {
+  moduleServer(id, function(input, output, session) {
+    
+    ICT_UPLOAD_DIR <- "/Users/tategraham/Documents/NHS/ict_dir"
+    
+    # ── Help ─────────────────────────────────────────────────────────────────
+    helpServer("help", content = list(
+      title = "Upload Help",
+      sections = list(
+        list(
+          heading = "What is this step?",
+          body    = "This step allows you to upload an ICT costing workbook and begin the RIDS pipeline."
+        ),
+        list(
+          heading = "What file should I upload?",
+          body    = "Upload the Excel (.xlsx) ICT workbook provided by your study team."
+        ),
+        list(
+          heading = "What is a Scenario?",
+          body    = "The scenario determines how costs are distributed across posting lines. Select the scenario that matches your study's commercial arrangement."
+        ),
+        list(
+          heading = "FAQ",
+          body    = "If you are unsure which scenario to select, contact your R&D finance lead."
+        )
+      )
+    ))
+    
+    # ── Next step ─────────────────────────────────────────────────────────────
+    observeEvent(input$next_step, {
+      current_step("step2")
+      shared_state$current_step <- "step2"
+      shinyjs::runjs('$("[data-value=\'tab_step2\']").tab("show")')
+      shinyjs::runjs("$('body').addClass('sidebar-collapse')")
+    })
+    
+    observeEvent(input$next_step, {
+      feedbackDanger("edge_id", show = is.null(input$edge_id) || input$edge_id == "", text = "Required")
+      feedbackDanger("scenario", show = is.null(input$scenario), text = "Required")
+      if (is.null(input$upload)) {
+        showNotification("Please upload a file", type = "warning")
+        return()
+      }
       
-      ICT_UPLOAD_DIR <- "/Users/tategraham/Documents/NHS/ict_dir"
+      req(input$edge_id != "", input$upload, input$scenario)
       
-      observeEvent(input$next_step, {
-        shared_state$current_step <- "step2"
-        shinyjs::runjs('$("[data-value=\'tab_step2\']").tab("show")')
-        shinyjs::runjs("$('body').addClass('sidebar-collapse')")
+      timestamp     <- format(Sys.time(), "%Y%m%d_%H%M%S")
+      original_name <- input$upload$name
+      saved_name    <- paste0(timestamp, "_", original_name)
+      saved_path    <- file.path(ICT_UPLOAD_DIR, saved_name)
+      
+      file.copy(input$upload$datapath, saved_path)
+      
+      extracted_cpms <- tryCatch({
+        extract_cpms_id(saved_path)
+      }, error = function(e) {
+        showNotification("Failed to extract CPMS ID", type = "error")
+        print(e)
+        return(NULL)
       })
       
-      observeEvent(input$'next_step', {
-        feedbackDanger("edge_id", show = is.null(input$edge_id) || input$edge_id == "", text = "Required")
-        feedbackDanger("scenario", show = is.null(input$scenario), text = "Required")
-        if (is.null(input$upload)) {
-          showNotification("Please upload a file", type = "warning")
-          return()
-        }
-        
-        req(input$edge_id != "", input$upload, input$scenario)
-        
-        # Build timestamped filename
-        timestamp     <- format(Sys.time(), "%Y%m%d_%H%M%S")
-        original_name <- input$upload$name
-        saved_name    <- paste0(timestamp, "_", original_name)
-        saved_path    <- file.path(ICT_UPLOAD_DIR, saved_name)
-        
-        # Copy file to audit directory
-        file.copy(input$upload$datapath, saved_path)
-        
-        # Extract CPMS ID
-        extracted_cpms <- tryCatch({
-          extract_cpms_id(saved_path)
-        }, error = function(e) {
-           showNotification("Failed to extract CPMS ID", type = "error")
-           print(e)
-           return(NULL)
-        })
-        
-        # Write metadata to DB
-        DBI::dbExecute(CON,
-                       "INSERT INTO meta_data 
-      (scenario_id, edge_id, study_name, notes, uploaded_by, original_filename, saved_file_path)
-      VALUES (?, ?, ?, ?, ?, ?, ?)",
-                         params = list(
-                         input$scenario,
-                         input$edge_id,
-                         input$study_name,
-                         input$notes,
-                         auth_state$user_id,
-                         original_name,
-                         saved_path
-                       )
-        )
-        
-        # Process workbook (pipeline step 1)
-        shared_state$processed_ict <- tryCatch({
-          process_workbook(
-            input_path = saved_path,
-            db_path    = DB_DIR
-          )
-        }, error = function(e) {
-          showNotification("Failed to process workbook", type = "error")
-          print(e)
-          return(NULL)
-        })
-        
-        # Set system shared state variables
-        shared_state$cpms_id     <- extracted_cpms
-        shared_state$current_step <- "step1"
-        shared_state$scenario_id  <- input$scenario
-        shared_state$upload_meta  <- list(
-          scenario_id = input$scenario,
-          edge_id   = input$edge_id,
-          filename  = original_name,
-          raw_ict   = saved_path,
-          timestamp = timestamp
-        )
-        
-        
+      DBI::dbExecute(CON,
+                     "INSERT INTO meta_data
+         (scenario_id, edge_id, study_name, notes, uploaded_by, original_filename, saved_file_path)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     params = list(
+                       input$scenario, input$edge_id, input$study_name,
+                       input$notes, auth_state$user_id, original_name, saved_path
+                     )
+      )
+      
+      shared_state$processed_ict <- tryCatch({
+        process_workbook(input_path = saved_path, db_path = DB_DIR)
+      }, error = function(e) {
+        showNotification("Failed to process workbook", type = "error")
+        print(e)
+        return(NULL)
       })
-    }
-  )
+      
+      shared_state$cpms_id      <- extracted_cpms
+      shared_state$current_step <- "step1"
+      shared_state$scenario_id  <- input$scenario
+      shared_state$upload_meta  <- list(
+        scenario_id = input$scenario,
+        edge_id     = input$edge_id,
+        filename    = original_name,
+        raw_ict     = saved_path,
+        timestamp   = timestamp
+      )
+    })
+    
+  })
 }

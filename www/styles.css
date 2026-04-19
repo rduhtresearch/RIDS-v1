@@ -152,3 +152,12 @@ body:not(.app-shell) .page-shell {
     padding: 1.5rem;
   }
 }
+
+.nav-sidebar .nav-item {
+  margin-bottom: 0 !important;
+}
+
+.nav-sidebar .nav-link {
+  padding-top: 0.4rem !important;
+  padding-bottom: 0.4rem !important;
+}
