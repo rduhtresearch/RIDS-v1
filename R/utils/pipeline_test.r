@@ -19,12 +19,19 @@ pw <- process_workbook(
   db_path    = DB_DIR
 )
 
-prepare_posting_input(
+a <- prepare_posting_input(
   ict = pw,
   scenario_id = "A",
   ict_db_path   = DB_DIR
-  
 )
+
+b <- evaluate_posting_plan(
+  prepared_df = a,
+  rules_db_path = DB_DIR,
+  scenario_id = "A",
+)
+View(b)
+
 
 View(pw$`AR1001 Treatment phase`)
 

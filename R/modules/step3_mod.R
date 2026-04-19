@@ -3,12 +3,7 @@ step3_UI <- function(id) {
   tagList(
     div(
       style = "display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;",
-      selectInput(
-        ns("tag_select"),
-        label = NULL,
-        choices = c("TRAINING_FEE"),
-        width = "200px"
-      ),
+      selectInput(ns("tag_select"),label = NULL, choices = c("TRAINING_FEE"),width = "200px"),
       actionButton(ns("apply_tag"), "Apply Tag", class = "btn-primary"),
       actionButton(ns("save"), "Save", class = "btn-success")
     ),
@@ -30,13 +25,12 @@ step3_Server <- function(id, auth_state, shared_state) {
         req(shared_state$processed_ict)
         
         df <- tryCatch({
-  
-          generate_posting_plan(
+          prepare_posting_input(
             ict           = shared_state$processed_ict,
-            rules_db_path = DB_DIR,
+            ict_db_path   = DB_DIR,
             scenario_id   = shared_state$scenario_id,
-            ict_db_path   = DB_DIR
           )
+    
         }, error = function(e){
           message("generate_posting_plan error: ", e$message)
           print(e)
@@ -61,10 +55,69 @@ step3_Server <- function(id, auth_state, shared_state) {
           rownames   = FALSE,
           striped    = TRUE,
           highlight  = TRUE,
-          compact    = TRUE
+          compact    = TRUE,
+          rowStyle   = JS("function(rowInfo) {
+    if (rowInfo.row['calc_tag'] !== null && rowInfo.row['calc_tag'] !== '') {
+      return { background: '#e8f4fd' }
+    }
+  }"),
+          columns = list(
+            .selection               = colDef(name = "Select", sortable = FALSE, filterable = FALSE, width = 50, align = "center", headerStyle = list(fontWeight = "bold"), header = JS("function() { return '' }")),
+            Visit                    = colDef(show = TRUE),
+            Activity                 = colDef(show = TRUE),
+            Activity.Type            = colDef(name = "Type", show = TRUE),
+            Department               = colDef(show = TRUE),
+            calc_tag                 = colDef(name = "Tag", show = TRUE),
+            Activity.Code            = colDef(show = FALSE),
+            Staff.Role               = colDef(show = FALSE),
+            Time.Required            = colDef(show = FALSE),
+            Activity.Cost            = colDef(show = FALSE),
+            Total.Activity.Cost      = colDef(show = FALSE),
+            Indirect.Costs           = colDef(show = FALSE),
+            Capacity.Building        = colDef(show = FALSE),
+            MFF                      = colDef(show = FALSE),
+            Total                    = colDef(show = FALSE),
+            study_name               = colDef(show = FALSE),
+            cpms_id                  = colDef(show = FALSE),
+            Flag                     = colDef(show = FALSE),
+            SheetName                = colDef(show = FALSE),
+            staff_group              = colDef(show = FALSE),
+            Study_Arm                = colDef(show = FALSE),
+            activity_occurrence_id.x = colDef(show = FALSE),
+            sheet_name               = colDef(show = FALSE),
+            row_id                   = colDef(show = FALSE),
+            provider_org             = colDef(show = FALSE),
+            pi_org                   = colDef(show = FALSE),
+            Visit_Label              = colDef(show = FALSE),
+            activity_type_norm       = colDef(show = FALSE),
+            staff_role_norm          = colDef(show = FALSE),
+            row_category_auto        = colDef(show = FALSE),
+            row_category             = colDef(show = FALSE),
+            is_medic                 = colDef(show = FALSE),
+            scenario_id              = colDef(show = FALSE),
+            ruleset_id               = colDef(show = FALSE),
+            activity_occurrence_id.y = colDef(show = FALSE),
+            contract_cost            = colDef(show = FALSE)
+          )
         )
       })
       
+      # Apply custom tag
+      observeEvent(input$apply_tag, {
+        selected_rows <- getReactableState("table", "selected")
+        req(selected_rows)
+        
+        working_data$df[selected_rows, "calc_tag"] <- input$tag_select
+        
+        updateReactable("table", data = working_data$df)
+      })
+      
+      # save updates
+      observeEvent(input$save, {
+        req(working_data$df)
+        shared_state$posting_plan <- working_data$df
+        showNotification("Tags saved", type = "message", duration = 5)
+      })
       
       observe({
         req(working_data$df)
@@ -73,6 +126,7 @@ step3_Server <- function(id, auth_state, shared_state) {
           message("names: ", paste(names(working_data$df), collapse = ", "))
         }
       })
+      
     }
   )
 }

@@ -534,26 +534,6 @@ generate_posting_plan <- function(ict,
   invisible(out)
 }
 
-prepare_posting_input <- function(ict,
-                                  scenario_id,
-                                  ruleset_id  = "COMM_AH_V1",
-                                  ict_db_path = NULL) {
-  
-  message("--- Reading ICT data ---")
-  df <- read_ict_workbook(ict)
-  
-  message("--- Normalising row context ---")
-  df <- normalise_rows(df, scenario_id, ruleset_id)
-  
-  if (!is.null(ict_db_path)) {
-    message("--- Joining ICT contract costs (corrected keys) ---")
-    df <- join_ict_costs(df, ict_db_path)
-  }
-  
-  message("--- Prepared posting input: ", nrow(df), " rows ---")
-  df
-}
-
 # -- CLI convenience -----------------------------------------------------------
 # Uncomment and set paths to run standalone:
 #
@@ -564,3 +544,72 @@ prepare_posting_input <- function(ict,
 #   ict_db_path   = "path/to/ict_local.duckdb",    # optional: contract cost join
 #   output_path   = "path/to/posting_plan.csv"
 # )
+
+
+# -- Split Function's ---------------
+
+# Split 1
+prepare_posting_input <- function(ict,
+                                  scenario_id,
+                                  ruleset_id  = "COMM_AH_V1",
+                                  ict_db_path = NULL) {
+  
+  # 1. Read & validate ICT
+  message("--- Reading ICT data ---")
+  df <- read_ict_workbook(ict)
+  
+  # 2. Normalise rows
+  message("--- Normalising row context ---")
+  df <- normalise_rows(df, scenario_id, ruleset_id)
+  
+  # 3. Optional: join contract costs from ict_costing_tbl
+  if (!is.null(ict_db_path)) {
+    message("--- Joining ICT contract costs (corrected keys) ---")
+    df <- join_ict_costs(df, ict_db_path)
+  }
+  
+  message("--- Prepared posting input: ", nrow(df), " rows ---")
+  df
+}
+
+# Split 2
+evaluate_posting_plan <- function(prepared_df,
+                                  rules_db_path,
+                                  scenario_id,
+                                  ruleset_id = "COMM_AH_V1",
+                                  mff_rate   = 1.08,
+                                  output_path = NULL) {
+  
+  if (!is.data.frame(prepared_df)) {
+    stop("evaluate_posting_plan(): `prepared_df` must be a dataframe.")
+  }
+  
+  # Original script behaviour preserved:
+  # calc_tag is already cleaned/handled in normalise_rows(),
+  # and row_category is already set there too.
+  
+  message("--- Loading finance rules ---")
+  rules <- load_rules(rules_db_path, ruleset_id)
+  
+  message("--- Applying distribution rules ---")
+  plan <- apply_dist_rules(prepared_df, rules$dist_rules, scenario_id)
+  
+  message("--- Calculating posting amounts ---")
+  plan <- apply_amount_map(plan, rules$amount_map, mff_rate)
+  
+  message("--- Resolving routing ---")
+  plan <- apply_routing(plan, rules$routing_rules)
+  
+  message("--- Resolving destination entities ---")
+  plan <- resolve_entities(plan)
+  
+  out <- select_output_cols(plan)
+  
+  if (!is.null(output_path)) {
+    write_csv(out, output_path)
+    message("Wrote posting plan to: ", output_path)
+  }
+  
+  message("--- Posting plan complete: ", nrow(out), " rows, scenario ", scenario_id, " ---")
+  invisible(out)
+}
