@@ -3,6 +3,7 @@
 .Rhistory
 .RData
 .Ruserdata
+config.R
 
 # OS
 .DS_Store
