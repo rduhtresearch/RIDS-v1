@@ -20,8 +20,6 @@ step1_UI <- function(id) {
 step1_Server <- function(id, auth_state, shared_state, current_step) {
   moduleServer(id, function(input, output, session) {
     
-    ICT_UPLOAD_DIR <- "/Users/tategraham/Documents/NHS/ict_dir"
-    
     # ── Help ─────────────────────────────────────────────────────────────────
     helpServer("help", content = list(
       title = "Upload Help",
