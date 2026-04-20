@@ -22,27 +22,32 @@ adminUI <- function(id) {
     fluidRow(
       bs4Card(
         title  = "Settings",
-        width  = 6,
+        width  = 12,
         status = "primary",
         div(
-          style = "display:flex; gap:1rem;",
-          
+          style = "display: flex; flex-direction: column; gap: 1.5rem;",
           div(
-            style = "width:500px;",
-            textInput(
-              ns("ict_dir"),
-              "ICT Upload Directory",
-              value = ICT_UPLOAD_DIR,
-              width = "100%"
+            style = "display: flex; gap: 1rem;",
+            div(
+              style = "width: 500px;",
+              textInput(ns("ict_dir"), "ICT Upload Directory",
+                        value = ICT_UPLOAD_DIR, width = "100%")
+            ),
+            div(
+              style = "padding-top: 31px;",
+              actionButton(ns("save_ict_dir"), "Save", class = "btn-primary")
             )
           ),
-          
           div(
-            style = "padding-top: 31px;",
-            actionButton(
-              ns("save_settings"),
-              "Save",
-              class = "btn-primary"
+            style = "display: flex; gap: 1rem;",
+            div(
+              style = "width: 500px;",
+              textInput(ns("edge_dir"), "EDGE Output Directory",
+                        value = EDGE_OUTPUT_DIR, width = "100%")
+            ),
+            div(
+              style = "padding-top: 31px;",
+              actionButton(ns("save_edge_dir"), "Save", class = "btn-primary")
             )
           )
         )
@@ -50,6 +55,7 @@ adminUI <- function(id) {
     )
   )
 }
+
 adminServer <- function(id, auth_state) {
   moduleServer(id, function(input, output, session) {
     
@@ -66,6 +72,22 @@ adminServer <- function(id, auth_state) {
         ICT_UPLOAD_DIR <<- input$ict_dir
         showNotification("Settings saved", type = "message", duration = 5)
         
+      }, error = function(e) {
+        message("Settings error: ", e$message)
+        showNotification("Failed to save settings", type = "error")
+      })
+    })
+    
+    observeEvent(input$save_edge_dir, {
+      req(input$edge_dir != "")
+      
+      tryCatch({
+        dbExecute(CON,
+                  "UPDATE app_settings SET value = ? WHERE key = 'edge_output_dir'",
+                  params = list(input$edge_dir)
+        )
+        EDGE_OUTPUT_DIR <<- input$edge_dir
+        showNotification("Edge output directory saved", type = "message", duration = 5)
       }, error = function(e) {
         message("Settings error: ", e$message)
         showNotification("Failed to save settings", type = "error")

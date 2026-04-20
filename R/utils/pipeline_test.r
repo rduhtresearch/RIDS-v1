@@ -25,31 +25,41 @@ a <- prepare_posting_input(
   ict_db_path   = DB_DIR
 )
 
+
 b <- evaluate_posting_plan(
   prepared_df = a,
   rules_db_path = DB_DIR,
   scenario_id = "A",
 )
-View(b)
 
 
-View(pw$`AR1001 Treatment phase`)
+# 
+# View(pw$`AR1001 Treatment phase`)
+# 
+# out <- generate_posting_plan(
+#   ict           = pw,
+#   rules_db_path = DB_DIR,
+#   scenario_id   = "A",
+#   ict_db_path   = DB_DIR
+# )
+# 
+# typeof(out)
+# class(out)
+# View(out)
 
-out <- generate_posting_plan(
-  ict           = pw,
-  rules_db_path = DB_DIR,
-  scenario_id   = "A",
-  ict_db_path   = DB_DIR
-)
+posting_lines_adjusted <- adjust_posting_lines(b)
+message(paste(names(posting_lines_adjusted), collapse = ", "))
+message(paste(sapply(posting_lines_adjusted, class), collapse = ", "))
 
-typeof(out)
-class(out)
-View(out)
-
-posting_lines_adjusted <- adjust_posting_lines(out)
+c <- posting_lines_adjusted |> filter(sheet_name == "AR1001 Treatment phase")
+View(c)
 View(posting_lines_adjusted)
 tm <- build_all_edge_templates(posting_lines_adjusted)
 View(tm)
+
+con <- DBI::dbConnect(duckdb::duckdb(), "~/nhs_finance_app_data/RIDS.duckdb")
+posting_lines <- DBI::dbGetQuery(con, "SELECT * FROM posting_lines") |> filter(study_name == "Candy Study")
+View(posting_lines)
 
 View(posting_lines_adjusted)
 

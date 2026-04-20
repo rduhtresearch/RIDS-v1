@@ -404,9 +404,51 @@ settings_table <- function() {
               "INSERT INTO app_settings (key, value) VALUES (?, ?)",
               params = list("ict_upload_dir", "/Users/tategraham/Documents/NHS/ict_dir")
     )
+    dbExecute(CON,
+              "INSERT INTO app_settings (key, value) VALUES (?, ?)",
+              params = list("edge_output_dir", EDGE_OUTPUT_DIR_DEFAULT)
+    )
   }
   
   message("Settings table initialised")
+}
+
+# Core costing table -----------------------------------------------------------
+posting_lines_table <- function() {
+  dbExecute(CON, "
+    CREATE TABLE IF NOT EXISTS posting_lines (
+      row_id               INTEGER,
+      scenario_id          VARCHAR,
+      row_category_auto    VARCHAR,
+      calc_tag             VARCHAR,
+      row_category         VARCHAR,
+      is_medic             BOOLEAN,
+      cpms_id              VARCHAR,
+      study_name           VARCHAR,
+      Study_Arm            VARCHAR,
+      Activity             VARCHAR,
+      Visit                VARCHAR,
+      posting_line_type_id VARCHAR,
+      posting_amount       DOUBLE,
+      destination_bucket   VARCHAR,
+      destination_entity   VARCHAR,
+      cost_code            VARCHAR,
+      sheet_name           VARCHAR,
+      Visit_Label          VARCHAR,
+      staff_group          INTEGER,
+      contract_cost        DOUBLE,
+      Department           VARCHAR,
+      contract_price       DOUBLE,
+      base_sum             DOUBLE,
+      multiplier           DOUBLE,
+      adjusted_amount      DOUBLE,
+      residual             DOUBLE,
+      is_residual_row      BOOLEAN,
+      adjusted_sum_check   DOUBLE,
+      diff_check           DOUBLE
+    );
+  ")
+  message("posting_lines table initialised")
 }
 
 ## Main Entry Point ------------------------------------------------------------
@@ -418,4 +460,5 @@ db_main <- function() {
   bootstrap_admin()
   build_rules_tables()
   settings_table()
+  posting_lines_table()
 }

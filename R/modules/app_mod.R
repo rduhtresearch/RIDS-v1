@@ -35,7 +35,7 @@ appServer <- function(id, auth_state, current_step) {
     step1_Server("step1", auth_state, shared_state, current_step)
     step2_Server("step2", auth_state, shared_state, current_step)
     step3_Server("step3", auth_state, shared_state, current_step)
-    step3_Server("step4", auth_state, shared_state, current_step)
+    step4_Server("step4", auth_state, shared_state, current_step)
     progressServer("progress", current_step)
     
     observe({
