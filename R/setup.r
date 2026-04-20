@@ -402,11 +402,11 @@ settings_table <- function() {
   if (count == 0) {
     dbExecute(CON,
               "INSERT INTO app_settings (key, value) VALUES (?, ?)",
-              params = list("ict_upload_dir", "/Users/tategraham/Documents/NHS/ict_dir")
+              params = list("ict_upload_dir", ICT_UPLOAD_DIR)
     )
     dbExecute(CON,
               "INSERT INTO app_settings (key, value) VALUES (?, ?)",
-              params = list("edge_output_dir", EDGE_OUTPUT_DIR_DEFAULT)
+              params = list("edge_output_dir", EDGE_OUTPUT_DIR)
     )
   }
   

@@ -8,7 +8,7 @@
 # ==============================================================================
 
 # 1. Install dependencies ------------------------------------------------------
-source("dependencies.R")
+source("R/dependencies.R")
 
 # 2. Configure paths -----------------------------------------------------------
 # Edit these to match your shared network drive or local paths
