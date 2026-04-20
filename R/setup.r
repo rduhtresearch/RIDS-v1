@@ -43,9 +43,7 @@ ict_table <- function() {
 meta_table <- function() {
   # 1. Define Table Schema
   query <- c(
-     "DROP TABLE IF EXISTS ict_uploads;
-      DROP TABLE IF EXISTS meta_data;    
-      CREATE SEQUENCE IF NOT EXISTS upload_id_seq;
+     "CREATE SEQUENCE IF NOT EXISTS upload_id_seq;
       CREATE TABLE IF NOT EXISTS meta_data (
         id               INTEGER PRIMARY KEY DEFAULT nextval('upload_id_seq'),
         scenario_id      VARCHAR,
@@ -128,19 +126,11 @@ build_rules_tables <- function() {
   
   # 4) Helper to run SQL quickly
   exec_sql <- function(sql) dbExecute(CON, sql)
-  
-  # 5) Drop tables to rebuild cleanly
-  exec_sql("DROP TABLE IF EXISTS dist_rules;")
-  exec_sql("DROP TABLE IF EXISTS routing_rules;")
-  exec_sql("DROP TABLE IF EXISTS amount_map;")
-  exec_sql("DROP TABLE IF EXISTS provider_orgs;")
-  exec_sql("DROP TABLE IF EXISTS posting_line_types;")
-  exec_sql("DROP TABLE IF EXISTS rulesets;")
-  
-  # 6) Create tables
-  # 6.1) Ruleset/version container
+
+  # 5) Create tables (idempotent)
+  # 5.1) Ruleset/version container
   exec_sql("
-    CREATE TABLE rulesets (
+    CREATE TABLE IF NOT EXISTS rulesets (
       ruleset_id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       version TEXT NOT NULL,
@@ -149,24 +139,24 @@ build_rules_tables <- function() {
     );
   ")
   
-  # 6.2) Provider org list
+  # 5.2) Provider org list
   exec_sql("
-    CREATE TABLE provider_orgs (
+    CREATE TABLE IF NOT EXISTS provider_orgs (
       provider_org TEXT PRIMARY KEY
     );
   ")
   
-  # 6.3) Posting line types
+  # 5.3) Posting line types
   exec_sql("
-    CREATE TABLE posting_line_types (
+    CREATE TABLE IF NOT EXISTS posting_line_types (
       posting_line_type_id TEXT PRIMARY KEY,
       label TEXT NOT NULL
     );
   ")
   
-  # 6.4) Distribution rules
+  # 5.4) Distribution rules
   exec_sql("
-    CREATE TABLE dist_rules (
+    CREATE TABLE IF NOT EXISTS dist_rules (
       dist_rule_id TEXT PRIMARY KEY,
       ruleset_id TEXT NOT NULL,
       scenario_id TEXT NOT NULL,
@@ -182,9 +172,9 @@ build_rules_tables <- function() {
     );
   ")
   
-  # 6.5) Amount mapping
+  # 5.5) Amount mapping
   exec_sql("
-    CREATE TABLE amount_map (
+    CREATE TABLE IF NOT EXISTS amount_map (
       posting_line_type_id TEXT PRIMARY KEY,
       base_mult DOUBLE NOT NULL,
       split_mult DOUBLE NOT NULL,
@@ -194,9 +184,9 @@ build_rules_tables <- function() {
     );
   ")
   
-  # 6.6) Routing rules
+  # 5.6) Routing rules
   exec_sql("
-    CREATE TABLE routing_rules (
+    CREATE TABLE IF NOT EXISTS routing_rules (
       routing_rule_id TEXT PRIMARY KEY,
       ruleset_id TEXT NOT NULL,
       scenario_id TEXT NOT NULL,
@@ -212,7 +202,12 @@ build_rules_tables <- function() {
     );
   ")
   
-  # 7) Seed base reference data
+  # 6) Seed base reference data (only on first run)
+  if (dbGetQuery(CON, "SELECT COUNT(*) AS n FROM rulesets")$n > 0) {
+    message("Rules tables already seeded — skipping")
+    return(invisible(NULL))
+  }
+
   exec_sql("
     INSERT INTO rulesets (ruleset_id, name, version, notes)
     VALUES ('COMM_AH_V1', 'Commercial Rules A–H', 'v1', 'A–H scenarios; MFF fixed at runtime param for MVP');
