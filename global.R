@@ -31,30 +31,25 @@ source("R/utils/build_template.r")
 # ==============================================================================
 message("=== GLOBAL LOAD ===\n")
 
-# Database directory reference
-DB_DIR <- "~/nhs_finance_app_data/RIDS.duckdb"
+# Load paths written by SETUP/new_setup.R
+if (!file.exists("config.R")) {
+  stop("config.R not found. Run R/SETUP/new_setup.R before launching the app.")
+}
+source("config.R")
 
-# Database connection reference (Temporary/Initial)
-CON <- dbConnect(duckdb(), "~/nhs_finance_app_data/RIDS.duckdb")
-
-# Run database build/seed process
-db_main()
-message("=== INIT_DB DONE ===\n")
-
-# Reconnect to the primary RIDS database
-CON <- dbConnect(duckdb(), "~/nhs_finance_app_data/RIDS.duckdb")
+# Connect to database
+CON <- dbConnect(duckdb(), DB_DIR)
 message("=== DB CONNECTED ===\n")
 
-# Default upload directory
-ICT_UPLOAD_DIR_DEFAULT <- "/Users/tategraham/Documents/NHS/ict_dir"
+# Load paths from DB settings (admin may have updated them); fall back to config values
+ICT_UPLOAD_DIR_DEFAULT <- ICT_UPLOAD_DIR
 
-# Load from DB if available, fall back to default
 ICT_UPLOAD_DIR <- tryCatch({
   val <- dbGetQuery(CON, "SELECT value FROM app_settings WHERE key = 'ict_upload_dir'")
   if (nrow(val) > 0) val$value else ICT_UPLOAD_DIR_DEFAULT
 }, error = function(e) ICT_UPLOAD_DIR_DEFAULT)
 
-EDGE_OUTPUT_DIR_DEFAULT <- file.path(path.expand("~"), "edge_outputs")
+EDGE_OUTPUT_DIR_DEFAULT <- EDGE_OUTPUT_DIR
 
 EDGE_OUTPUT_DIR <- tryCatch({
   val <- dbGetQuery(CON, "SELECT value FROM app_settings WHERE key = 'edge_output_dir'")
