@@ -71,7 +71,8 @@ sidebarServer <- function(id, auth_state, parent_session, current_step) {
             style = "display:none",
             menuItem("ICT",        tabName = "tab_step1", icon = icon("file")),
             menuItem("ICT Step 2", tabName = "tab_step2", icon = icon("file")),
-            menuItem("ICT Step 3", tabName = "tab_step3", icon = icon("file"))
+            menuItem("ICT Step 3", tabName = "tab_step3", icon = icon("file")),
+            menuItem("ICT Step 4", tabName = "tab_step4", icon = icon("file"))
           )
         ),
         

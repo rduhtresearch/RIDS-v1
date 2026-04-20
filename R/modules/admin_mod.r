@@ -18,12 +18,59 @@ adminUI <- function(id) {
         status = "primary",
         reactableOutput(ns("users_table"))
       )
+    ),
+    fluidRow(
+      bs4Card(
+        title  = "Settings",
+        width  = 6,
+        status = "primary",
+        div(
+          style = "display:flex; gap:1rem;",
+          
+          div(
+            style = "width:500px;",
+            textInput(
+              ns("ict_dir"),
+              "ICT Upload Directory",
+              value = ICT_UPLOAD_DIR,
+              width = "100%"
+            )
+          ),
+          
+          div(
+            style = "padding-top: 31px;",
+            actionButton(
+              ns("save_settings"),
+              "Save",
+              class = "btn-primary"
+            )
+          )
+        )
+      )
     )
   )
 }
-
 adminServer <- function(id, auth_state) {
   moduleServer(id, function(input, output, session) {
+    
+    # Save settings 
+    observeEvent(input$save_settings, {
+      req(input$ict_dir != "")
+      
+      tryCatch({
+        dbExecute(CON,
+                  "UPDATE app_settings SET value = ? WHERE key = 'ict_upload_dir'",
+                  params = list(input$ict_dir)
+        )
+        
+        ICT_UPLOAD_DIR <<- input$ict_dir
+        showNotification("Settings saved", type = "message", duration = 5)
+        
+      }, error = function(e) {
+        message("Settings error: ", e$message)
+        showNotification("Failed to save settings", type = "error")
+      })
+    })
  
     observe({
       if (!isTRUE(auth_state$role == "admin")) {

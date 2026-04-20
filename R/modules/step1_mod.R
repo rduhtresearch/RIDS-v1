@@ -47,22 +47,18 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
     
     # ── Next step ─────────────────────────────────────────────────────────────
     observeEvent(input$next_step, {
-      current_step("step2")
-      shared_state$current_step <- "step2"
-      shinyjs::runjs('$("[data-value=\'tab_step2\']").tab("show")')
-      shinyjs::runjs("$('body').addClass('sidebar-collapse')")
-    })
-    
-    observeEvent(input$next_step, {
-      feedbackDanger("edge_id", show = is.null(input$edge_id) || input$edge_id == "", text = "Required")
-      feedbackDanger("scenario", show = is.null(input$scenario), text = "Required")
-      if (is.null(input$upload)) {
-        showNotification("Please upload a file", type = "warning")
-        return()
-      }
       
-      req(input$edge_id != "", input$upload, input$scenario)
+      # ── Validation ───────────────────────────────────────────────────────
+      feedbackDanger("edge_id", show = input$edge_id == "", text = "Required")
+      feedbackDanger("upload",  show = is.null(input$upload), text = "Required")
       
+      req(
+        input$edge_id != "",
+        input$scenario,
+        !is.null(input$upload)
+      )
+      
+      # ── Process ──────────────────────────────────────────────────────────
       timestamp     <- format(Sys.time(), "%Y%m%d_%H%M%S")
       original_name <- input$upload$name
       saved_name    <- paste0(timestamp, "_", original_name)
@@ -77,6 +73,8 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
         print(e)
         return(NULL)
       })
+      
+      req(extracted_cpms)
       
       DBI::dbExecute(CON,
                      "INSERT INTO meta_data
@@ -96,8 +94,9 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
         return(NULL)
       })
       
+      req(shared_state$processed_ict)
+      
       shared_state$cpms_id      <- extracted_cpms
-      shared_state$current_step <- "step1"
       shared_state$scenario_id  <- input$scenario
       shared_state$upload_meta  <- list(
         scenario_id = input$scenario,
@@ -106,6 +105,11 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
         raw_ict     = saved_path,
         timestamp   = timestamp
       )
+      
+      # ── Navigate ─────────────────────────────────────────────────────────
+      current_step("step2")
+      shinyjs::runjs('$("[data-value=\'tab_step2\']").tab("show")')
+      shinyjs::runjs("$('body').addClass('sidebar-collapse')")
     })
     
   })

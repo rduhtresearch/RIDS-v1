@@ -8,7 +8,8 @@ step3_UI <- function(id) {
     footer = tagList(
       selectInput(ns("tag_select"), label = NULL, choices = c("TRAINING_FEE"), width = "200px"),
       actionButton(ns("apply_tag"), "Apply Tag", class = "btn-primary"),
-      actionButton(ns("save"), "Save", class = "btn-success")
+      actionButton(ns("save"), "Save", class = "btn-success"),
+      actionButton(ns("next_step"), "Next: Generate Templates", class = "btn-primary")
     ),
     reactableOutput(ns("table"))
   )
@@ -18,6 +19,39 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
   moduleServer(
     id,
     function(input, output, session) {
+      
+      # loading animation
+      w <- Waiter$new(
+        html = tagList(
+          div(
+            style = "display: flex; flex-direction: column; align-items: center; gap: 1.5rem;",
+            tags$style("
+        @keyframes spin-ring {
+          0%   { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .green-ring {
+          width: 64px;
+          height: 64px;
+          border-radius: 50%;
+          border: 5px solid rgba(40, 167, 69, 0.2);
+          border-top-color: #28a745;
+          animation: spin-ring 0.9s linear infinite;
+        }
+      "),
+            div(class = "green-ring"),
+            div(
+              style = "color: #ffffff; font-size: 1rem; font-weight: 600; letter-spacing: 0.03em;",
+              "Running cost adjustment engine"
+            ),
+            div(
+              style = "color: rgba(255,255,255,0.5); font-size: 0.8rem;",
+              "This may take a moment..."
+            )
+          )
+        ),
+        color = "rgba(18, 34, 48, 0.92)"
+      )
       
       # declare reactive val for data
       working_data = reactiveValues(df = NULL)
@@ -118,8 +152,37 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
       # save updates
       observeEvent(input$save, {
         req(working_data$df)
+        
+        w$show()
+        
         shared_state$posting_plan <- working_data$df
+        
+        evaluated <- tryCatch({
+          evaluate_posting_plan(
+            prepared_df = working_data$df,
+            rules_db_path = DB_DIR,
+            scenario_id = "A"
+          )
+        }, error = function(e) {
+          message("evaluate_posting_plan error: ", e$message)
+          showNotification("Failed to evaluate posting plan", type = "error")
+          w$hide()
+          return(NULL)
+        })
+        
+        w$hide()
+        req(evaluated)
+        shared_state$evaluated_plan <- evaluated
+        
         showNotification("Tags saved", type = "message", duration = 5)
+      })
+      
+      # next step
+      observeEvent(input$next_step, {
+        req(shared_state$evaluated_plan)
+        current_step("step4")
+        shinyjs::runjs('$("[data-value=\'tab_step4\']").tab("show")')
+        shinyjs::runjs("$('body').addClass('sidebar-collapse')")
       })
       
       observe({

@@ -388,6 +388,27 @@ bootstrap_admin <- function() {
   }
 }
 
+# Admin settings tables --------------------------------------------------------
+settings_table <- function() {
+  dbExecute(CON, "
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  ")
+  
+  # Seed defaults if empty
+  count <- dbGetQuery(CON, "SELECT COUNT(*) AS n FROM app_settings")$n
+  if (count == 0) {
+    dbExecute(CON,
+              "INSERT INTO app_settings (key, value) VALUES (?, ?)",
+              params = list("ict_upload_dir", "/Users/tategraham/Documents/NHS/ict_dir")
+    )
+  }
+  
+  message("Settings table initialised")
+}
+
 ## Main Entry Point ------------------------------------------------------------
 db_main <- function() {
   ict_table()
@@ -396,4 +417,5 @@ db_main <- function() {
   user_tables()
   bootstrap_admin()
   build_rules_tables()
+  settings_table()
 }

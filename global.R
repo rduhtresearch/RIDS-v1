@@ -42,6 +42,16 @@ message("=== INIT_DB DONE ===\n")
 CON <- dbConnect(duckdb(), "~/nhs_finance_app_data/RIDS.duckdb")
 message("=== DB CONNECTED ===\n")
 
+# Default upload directory
+ICT_UPLOAD_DIR_DEFAULT <- "/Users/tategraham/Documents/NHS/ict_dir"
+
+# Load from DB if available, fall back to default
+ICT_UPLOAD_DIR <- tryCatch({
+  val <- dbGetQuery(CON, "SELECT value FROM app_settings WHERE key = 'ict_upload_dir'")
+  if (nrow(val) > 0) val$value else ICT_UPLOAD_DIR_DEFAULT
+}, error = function(e) ICT_UPLOAD_DIR_DEFAULT)
+
+
 # ==============================================================================
 # SHINY SESSION CLEANUP
 # ==============================================================================

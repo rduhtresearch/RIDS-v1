@@ -7,6 +7,7 @@ appUI <- function(id) {
       tabItem("tab_step1", step1_UI(NS(id, "step1"))),
       tabItem("tab_step2", step2_UI(NS(id, "step2"))),
       tabItem("tab_step3", step3_UI(NS(id, "step3"))),
+      tabItem("tab_step4", step4_UI(NS(id, "step4"))),
       tabItem("tab_admin", adminUI("admin"))
     )
   )
@@ -34,11 +35,12 @@ appServer <- function(id, auth_state, current_step) {
     step1_Server("step1", auth_state, shared_state, current_step)
     step2_Server("step2", auth_state, shared_state, current_step)
     step3_Server("step3", auth_state, shared_state, current_step)
+    step3_Server("step4", auth_state, shared_state, current_step)
     progressServer("progress", current_step)
     
     observe({
       current <- input$sidebar
-      if (!is.null(current) && current %in% c("tab_step1", "tab_step2", "tab_step3")) {
+      if (!is.null(current) && current %in% c("tab_step1", "tab_step2", "tab_step3", "tab_step4")) {
         shared_state$current_step <- gsub("tab_", "", current)
       } else {
         shared_state$current_step <- NULL

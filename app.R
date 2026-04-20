@@ -6,6 +6,7 @@ source("R/modules/app_mod.R")
 source("R/modules/step1_mod.R")
 source("R/modules/step2_mod.R")
 source("R/modules/step3_mod.R")
+source("R/modules/step4_mod.R")
 source("R/modules/admin_mod.R")
 source("R/modules/progress_mod.R")
 source("R/modules/help_mod.R")
@@ -36,6 +37,7 @@ ui <- tagList(
       sidebarUI("sidebar")
     ),
     body = dashboardBody(
+      useWaiter() ,
       useShinyjs(),
       useShinyFeedback(),
       loginUI("login"),
