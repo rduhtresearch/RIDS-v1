@@ -75,12 +75,18 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       req(extracted_cpms)
       
       DBI::dbExecute(CON,
-                     "INSERT INTO meta_data
-         (scenario_id, edge_id, study_name, notes, uploaded_by, original_filename, saved_file_path)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     "INSERT INTO meta_data 
+   (cpms_id, scenario_id, edge_id, study_name, notes, uploaded_by, original_filename, saved_file_path)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                      params = list(
-                       input$scenario, input$edge_id, input$study_name,
-                       input$notes, auth_state$user_id, original_name, saved_path
+                       as.character(extracted_cpms),
+                       input$scenario,
+                       input$edge_id,
+                       input$study_name,
+                       input$notes,
+                       auth_state$user_id,
+                       original_name,
+                       saved_path
                      )
       )
       

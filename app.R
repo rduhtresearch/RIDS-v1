@@ -10,6 +10,7 @@ source("R/modules/step4_mod.R")
 source("R/modules/admin_mod.R")
 source("R/modules/progress_mod.R")
 source("R/modules/help_mod.R")
+source("R/modules/library_mod.R")
 
 ui <- tagList(
   tags$head(

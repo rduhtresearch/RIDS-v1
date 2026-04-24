@@ -4,6 +4,7 @@ appUI <- function(id) {
     tabItems(
       tabItem("tab_dashboard", ""),
       tabItem("tab_settings",  ""),
+      tabItem("tab_library",   libraryUI(NS(id, "library"))),
       tabItem("tab_step1", step1_UI(NS(id, "step1"))),
       tabItem("tab_step2", step2_UI(NS(id, "step2"))),
       tabItem("tab_step3", step3_UI(NS(id, "step3"))),
@@ -37,6 +38,7 @@ appServer <- function(id, auth_state, current_step) {
     step3_Server("step3", auth_state, shared_state, current_step)
     step4_Server("step4", auth_state, shared_state, current_step)
     progressServer("progress", current_step)
+    libraryServer("library", auth_state)
     
     observe({
       current <- input$sidebar

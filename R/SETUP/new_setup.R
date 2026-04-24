@@ -13,9 +13,9 @@ source("R/dependencies.R")
 # 2. Configure paths -----------------------------------------------------------
 # Edit these to match your shared network drive or local paths
 
-DB_DIR          <- "//shared-drive/RIDS/data/RIDS.duckdb"
-ICT_UPLOAD_DIR  <- "//shared-drive/RIDS/uploads"
-EDGE_OUTPUT_DIR <- "//shared-drive/RIDS/outputs"
+DB_DIR          <- "/Users/tategraham/Documents/NHS/RIDS_/RIDS/data/RIDS.duckdb"
+ICT_UPLOAD_DIR  <- "/Users/tategraham/Documents/NHS/RIDS_/RIDS/uploads"
+EDGE_OUTPUT_DIR <- "/Users/tategraham/Documents/NHS/RIDS_/RIDS/outputs"
 ADMIN_USERNAME  <- "admin"  # your admin account username
 
 # 3. Write config.R ------------------------------------------------------------

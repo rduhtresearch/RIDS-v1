@@ -55,7 +55,7 @@ EDGE_OUTPUT_DIR <- tryCatch({
   val <- dbGetQuery(CON, "SELECT value FROM app_settings WHERE key = 'edge_output_dir'")
   if (nrow(val) > 0) val$value else EDGE_OUTPUT_DIR_DEFAULT
 }, error = function(e) EDGE_OUTPUT_DIR_DEFAULT)
-
+db_main()
 # ==============================================================================
 # SHINY SESSION CLEANUP
 # ==============================================================================

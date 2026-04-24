@@ -41,23 +41,26 @@ ict_table <- function() {
 
 ## App data --------------------------------------------------------------------
 meta_table <- function() {
-  # 1. Define Table Schema
-  query <- c(
-     "CREATE SEQUENCE IF NOT EXISTS upload_id_seq;
-      CREATE TABLE IF NOT EXISTS meta_data (
-        id               INTEGER PRIMARY KEY DEFAULT nextval('upload_id_seq'),
-        scenario_id      VARCHAR,
-        edge_id          VARCHAR,
-        study_name       VARCHAR,
-        notes            VARCHAR,
-        uploaded_by      VARCHAR,
-        upload_timestamp TIMESTAMP DEFAULT current_timestamp,
-        original_filename VARCHAR,
-        saved_file_path  VARCHAR
-      );"
+  queries <- c(
+    "DROP TABLE IF EXISTS ict_uploads;",
+    "CREATE SEQUENCE IF NOT EXISTS upload_id_seq;",
+    "CREATE TABLE IF NOT EXISTS meta_data (
+      id                INTEGER PRIMARY KEY DEFAULT nextval('upload_id_seq'),
+      cpms_id           VARCHAR,
+      scenario_id       VARCHAR,
+      edge_id           VARCHAR,
+      study_name        VARCHAR,
+      notes             VARCHAR,
+      uploaded_by       VARCHAR,
+      upload_timestamp  TIMESTAMP DEFAULT current_timestamp,
+      original_filename VARCHAR,
+      saved_file_path   VARCHAR
+    );"
   )
   
-  dbExecute(CON, query)
+  for (query in queries) {
+    dbExecute(CON, query)
+  }
   message('meta built')
 }
 ## User tables -----------------------------------------------------------------

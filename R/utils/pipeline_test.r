@@ -60,6 +60,7 @@ View(tm)
 con <- DBI::dbConnect(duckdb::duckdb(), "~/nhs_finance_app_data/RIDS.duckdb")
 posting_lines <- DBI::dbGetQuery(con, "SELECT * FROM posting_lines") |> filter(study_name == "Candy Study")
 View(posting_lines)
+identical(posting_lines, posting_lines_adjusted)
 
 View(posting_lines_adjusted)
 
