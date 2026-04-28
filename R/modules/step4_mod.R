@@ -62,6 +62,10 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       
       req(adjusted)
       
+      # Note: Fix this - needs to be renamed earlier in the pipeline. This is not clean.
+      adjusted <- adjusted %>% 
+        rename(Staff_Role = Staff.Role)
+      
       # Step 2 — save posting lines to DB
       tryCatch({
         dbExecute(CON,
