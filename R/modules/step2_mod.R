@@ -111,7 +111,7 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
     # ── Next step ─────────────────────────────────────────────────────────────
     observeEvent(input$next_step, {
       current_step("step3")
-      shared_state$current_step <- "step 3"
+      shared_state$current_step <- "step3"
       shinyjs::runjs('$("[data-value=\'tab_step3\']").tab("show")')
       shinyjs::runjs("$('body').addClass('sidebar-collapse')")
     })

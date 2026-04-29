@@ -58,7 +58,7 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
       
       # run pipeline step on load
       observe({
-        req(shared_state$current_step == "step 3")
+        req(shared_state$current_step == "step3")
         req(shared_state$processed_ict)
         
         df <- tryCatch({

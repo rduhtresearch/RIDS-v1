@@ -22,6 +22,9 @@ source("R/utils/posting_test.r")
 source("R/utils/extract_cpms_id.r")
 source("R/utils/template_build_main.r")
 source("R/utils/posting_lines.r")
+source("R/utils/dev_banner.r")
+source("R/utils/add_cost_centres.r")
+
 
 source("R/utils/adjust.r")
 source("R/utils/build_template.r")

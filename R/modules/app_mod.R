@@ -41,12 +41,7 @@ appServer <- function(id, auth_state, current_step) {
     libraryServer("library", auth_state)
     
     observe({
-      current <- input$sidebar
-      if (!is.null(current) && current %in% c("tab_step1", "tab_step2", "tab_step3", "tab_step4")) {
-        shared_state$current_step <- gsub("tab_", "", current)
-      } else {
-        shared_state$current_step <- NULL
-      }
+      shared_state$current_step <- current_step()
     })
     
     

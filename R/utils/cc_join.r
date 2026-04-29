@@ -120,7 +120,7 @@ add_cost_centres <- function(posting_output, study_speciality) {
 test <- add_cost_centres(df, 'Cardiology')
 View(test)
 
-test2 <- test |> filter(posting_line_type_id == "DIRECT")
+test2 <- test |> filter(row_category == "SETUP_CLOSE_DEPARTMENTAL")
 View(test2)
 
 View(test)

@@ -41,6 +41,7 @@ ui <- tagList(
     body = dashboardBody(
       useWaiter() ,
       useShinyjs(),
+      dev_banner(),
       useShinyFeedback(),
       loginUI("login"),
       appUI("app")
@@ -71,8 +72,18 @@ server <- function(input, output, session) {
     )
   })
   
+  pipeline_tabs <- c("tab_step1", "tab_step2", "tab_step3", "tab_step4")
   current_step <- reactiveVal(NULL)
   auth_state <- loginServer("login")
+
+  observe({
+    current <- input$sidebar
+    if (!is.null(current) && current %in% pipeline_tabs) {
+      current_step(gsub("tab_", "", current))
+    } else {
+      current_step(NULL)
+    }
+  })
 
   observe({
     session$sendCustomMessage("setAppShell", isTRUE(auth_state$logged_in))

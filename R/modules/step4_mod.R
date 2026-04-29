@@ -264,6 +264,19 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       
       adjusted <- adjusted %>% rename(Staff_Role = Staff.Role)
       
+      # ── Attach cost centres ──────────────────────────────────────────────────
+      adjusted <- tryCatch({
+        add_cost_centres(adjusted, isolate(shared_state$speciality_name))
+      }, error = function(e) {
+        message("add_cost_centres error: ", conditionMessage(e))
+        showNotification(
+          paste("Failed to assign cost centres:", conditionMessage(e)),
+          type = "error",
+          duration = 10
+        )
+        return(adjusted)
+      })
+      
       tryCatch({
         dbExecute(CON,
                   "DELETE FROM posting_lines WHERE cpms_id = ?",
