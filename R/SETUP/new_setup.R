@@ -4,7 +4,7 @@
 # Run this script ONCE before launching the app for the first time.
 # 1. Edit the three paths in section 2
 # 2. Run the entire script
-# 3. Launch app.R
+# 3. Launch app.Ra
 # ==============================================================================
 
 # 1. Install dependencies ------------------------------------------------------

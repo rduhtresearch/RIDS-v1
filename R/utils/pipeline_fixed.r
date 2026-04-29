@@ -382,12 +382,50 @@ run_stage_a <- function(input_file, db_path = NULL) {
 
 # ── Stage B ───────────────────────────────────────────────────────────────────
 
+# run_stage_b <- function(df) {
+#   UA_SHEET         <- "Unscheduled Activities"
+#   PHARM_SHEET      <- "Pharmacy"
+#   SETUP_SHEET      <- "Setup & Closedown"
+#   UA_FLAG          <- "Unscheduled / Itemised Activities"
+#   PHARM_DEPT       <- "Pharmacy"
+#   PROTECTED_SHEETS <- c(SETUP_SHEET, PHARM_SHEET, UA_SHEET)
+#   
+#   names(df) <- trimws(names(df))
+#   
+#   ua_cond <- quo(Flag == UA_FLAG)
+#   if (UA_SHEET %in% names(df)) {
+#     df[[UA_SHEET]] <- .format_ua_columns(df[[UA_SHEET]])
+#   } else {
+#     df[[UA_SHEET]] <- .extract_rows(df, ua_cond, exclude_sheets = PROTECTED_SHEETS) %>%
+#       .format_ua_columns()
+#     df <- .remove_rows(df, ua_cond, exclude_sheets = PROTECTED_SHEETS)
+#   }
+#   
+#   if (SETUP_SHEET %in% names(df)) {
+#     df[[SETUP_SHEET]] <- .format_ua_columns(df[[SETUP_SHEET]])
+#   }
+#   
+#   pharm_cond <- quo(Department == PHARM_DEPT)
+#   pharm_new  <- .extract_rows(df, pharm_cond, exclude_sheets = PROTECTED_SHEETS)
+#   
+#   if (nrow(pharm_new) > 0) {
+#     df[[PHARM_SHEET]] <- if (PHARM_SHEET %in% names(df)) {
+#       bind_rows(df[[PHARM_SHEET]], pharm_new)
+#     } else {
+#       pharm_new
+#     }
+#     df <- .remove_rows(df, pharm_cond, exclude_sheets = PROTECTED_SHEETS)
+#   }
+#   
+#   df_long <- lapply(df, .pivot_activity_data)
+#   
+#   invisible(df_long)
+# }
 run_stage_b <- function(df) {
   UA_SHEET         <- "Unscheduled Activities"
   PHARM_SHEET      <- "Pharmacy"
   SETUP_SHEET      <- "Setup & Closedown"
   UA_FLAG          <- "Unscheduled / Itemised Activities"
-  PHARM_DEPT       <- "Pharmacy"
   PROTECTED_SHEETS <- c(SETUP_SHEET, PHARM_SHEET, UA_SHEET)
   
   names(df) <- trimws(names(df))
@@ -403,18 +441,6 @@ run_stage_b <- function(df) {
   
   if (SETUP_SHEET %in% names(df)) {
     df[[SETUP_SHEET]] <- .format_ua_columns(df[[SETUP_SHEET]])
-  }
-  
-  pharm_cond <- quo(Department == PHARM_DEPT)
-  pharm_new  <- .extract_rows(df, pharm_cond, exclude_sheets = PROTECTED_SHEETS)
-  
-  if (nrow(pharm_new) > 0) {
-    df[[PHARM_SHEET]] <- if (PHARM_SHEET %in% names(df)) {
-      bind_rows(df[[PHARM_SHEET]], pharm_new)
-    } else {
-      pharm_new
-    }
-    df <- .remove_rows(df, pharm_cond, exclude_sheets = PROTECTED_SHEETS)
   }
   
   df_long <- lapply(df, .pivot_activity_data)

@@ -155,18 +155,21 @@ normalise_rows <- function(df, scenario_id, ruleset_id) {
     mutate(
       activity_type_norm = str_to_lower(str_trim(.data$Activity.Type)),
       staff_role_norm    = str_to_lower(str_trim(.data$Staff.Role)),
+      sheet_name_norm    = str_to_lower(str_trim(.data$sheet_name)),
       
-      row_category_auto = if_else(
-        str_detect(activity_type_norm, "investigation"),
-        "INVESTIGATION",
-        "BASELINE"
+      row_category_auto = case_when(
+        str_detect(sheet_name_norm, "setup") &
+          str_detect(sheet_name_norm, "closedown") &
+          str_detect(activity_type_norm, "departmental") ~ "SETUP_CLOSE_DEPARTMENTAL",
+        
+        str_detect(activity_type_norm, "investigation") ~ "INVESTIGATION",
+        
+        TRUE ~ "BASELINE"
       ),
       
-      # Clean calc_tag: blank / whitespace -> NA
       calc_tag = if_else(is.na(calc_tag), NA_character_, str_trim(as.character(calc_tag))),
       calc_tag = if_else(calc_tag == "", NA_character_, calc_tag),
       
-      # Effective category: manual override wins, else auto
       row_category = if_else(!is.na(calc_tag), calc_tag, row_category_auto),
       
       is_medic    = (str_trim(.data$Staff.Role) == "Medical Staff"),
@@ -313,7 +316,8 @@ apply_dist_rules <- function(df, dist_rules, scenario_id) {
     c("sheet_name", "Study_Arm", "Visit", "Activity", "cpms_id", "study_name",
       "row_id", "scenario_id", "row_category_auto", "calc_tag", "row_category",
       "is_medic", "Visit_Label", "activity_occurrence_id", "staff_group",
-      "provider_org", "pi_org", "Activity.Cost", "contract_cost", "Department")
+      "provider_org", "pi_org", "Activity.Cost", "contract_cost", "Department", 
+      "Cost_Type", "Staff.Role")
   )
   
   df %>%
@@ -454,7 +458,8 @@ select_output_cols <- function(posting_plan) {
   )
   
   # Optional columns from corrected schema (present if pipeline_fixed.r was used)
-  optional <- c("sheet_name", "Visit_Label", "activity_occurrence_id", "staff_group", "contract_cost", "Department")
+  optional <- c("sheet_name", "Visit_Label", "activity_occurrence_id", 
+                "staff_group", "contract_cost", "Department", "Staff.Role")
   
   all_cols <- c(core, intersect(optional, names(posting_plan)))
   

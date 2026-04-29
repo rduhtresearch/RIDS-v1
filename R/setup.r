@@ -54,13 +54,23 @@ meta_table <- function() {
       uploaded_by       VARCHAR,
       upload_timestamp  TIMESTAMP DEFAULT current_timestamp,
       original_filename VARCHAR,
-      saved_file_path   VARCHAR
+      saved_file_path   VARCHAR,
+      speciality_id     INTEGER
     );"
   )
   
   for (query in queries) {
     dbExecute(CON, query)
   }
+  
+  # Idempotent column add for pre-existing DBs that were built before
+  # speciality_id was part of the schema.
+  meta_cols <- dbListFields(CON, "meta_data")
+  if (!"speciality_id" %in% meta_cols) {
+    dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN speciality_id INTEGER;")
+    message("meta_data.speciality_id column added")
+  }
+  
   message('meta built')
 }
 ## User tables -----------------------------------------------------------------
@@ -261,6 +271,7 @@ build_rules_tables <- function() {
   baseline_std <- c("DIRECT", "CAPACITY_RD", "INDIRECT_50_DELIVERY", "INDIRECT_25_TRUST", "INDIRECT_25_PI")
   invest_std <- c("DIRECT", "CAPACITY_RD")
   training_std <- baseline_std
+  setup_close_departmental_std <- c("DIRECT")
   
   # 9.2) Scenarios like A
   like_A <- c("A", "C", "E", "G", "H")
@@ -280,11 +291,25 @@ build_rules_tables <- function() {
       insert_dist_rule(paste0(sc, "_TRAIN_", pl), sc, "TRAINING_FEE", pl, pr)
       pr <- pr + 10
     }
+    pr <- 10
+    for (pl in setup_close_departmental_std) {
+      insert_dist_rule(
+        paste0(sc, "_SETUPCLOSE_DEPT_", pl),
+        sc,
+        "SETUP_CLOSE_DEPARTMENTAL",
+        pl,
+        pr,
+        notes = "Setup & Closedown departmental costs: direct only"
+      )
+      pr <- pr + 10
+    }
   }
   
   # 9.3) TRD scenarios: B, D, F
   trd_scenarios <- c("B", "D", "F")
+  
   for (sc in trd_scenarios) {
+    
     pr <- 20
     for (pl in baseline_std) {
       insert_dist_rule(paste0(sc, "_BASE_NONMED_", pl), sc, "BASELINE", pl, pr,
@@ -292,11 +317,27 @@ build_rules_tables <- function() {
                        notes = "TRD scenario: non-medic baseline uses standard direct")
       pr <- pr + 10
     }
+    
     pr_train <- 10
     for (pl in baseline_std) {
       insert_dist_rule(paste0(sc, "_TRAIN_", pl), sc, "TRAINING_FEE", pl, pr_train)
       pr_train <- pr_train + 10
     }
+    
+    # Setup & Closedown Departmental costs: direct only
+    pr_setup <- 10
+    for (pl in setup_close_departmental_std) {
+      insert_dist_rule(
+        paste0(sc, "_SETUPCLOSE_DEPT_", pl),
+        sc,
+        "SETUP_CLOSE_DEPARTMENTAL",
+        pl,
+        pr_setup,
+        notes = "Setup & Closedown departmental costs: direct only"
+      )
+      pr_setup <- pr_setup + 10
+    }
+    
     insert_dist_rule(paste0(sc, "_BASE_MED_DIRECT40"), sc, "BASELINE", "DIRECT_40_PI", 5,
                      condition_field = "is_medic", condition_op = "=", condition_value = "TRUE",
                      notes = "TRD medic: 40% direct to PI")
@@ -311,6 +352,7 @@ build_rules_tables <- function() {
                      condition_field = "is_medic", condition_op = "=", condition_value = "TRUE")
     insert_dist_rule(paste0(sc, "_BASE_MED_I25P"), sc, "BASELINE", "INDIRECT_25_PI", 50,
                      condition_field = "is_medic", condition_op = "=", condition_value = "TRUE")
+    
     insert_dist_rule(paste0(sc, "_INV_DIRECT"), sc, "INVESTIGATION", "DIRECT", 10)
     insert_dist_rule(paste0(sc, "_INV_CAP"), sc, "INVESTIGATION", "CAPACITY_RD", 20)
   }
@@ -411,6 +453,41 @@ settings_table <- function() {
   message("Settings table initialised")
 }
 
+# Specialities lookup ----------------------------------------------------------
+specialities_table <- function() {
+  dbExecute(CON, "
+    CREATE SEQUENCE IF NOT EXISTS specialities_id_seq START 1;
+  ")
+  
+  dbExecute(CON, "
+    CREATE TABLE IF NOT EXISTS specialities (
+      id           INTEGER PRIMARY KEY DEFAULT nextval('specialities_id_seq'),
+      name         TEXT NOT NULL UNIQUE,
+      archived_at  TIMESTAMP,
+      created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  ")
+  
+  count <- dbGetQuery(CON, "SELECT COUNT(*) AS n FROM specialities")$n
+  if (count == 0) {
+    seed <- c(
+      "Cancer", "Cardiology", "Dendron", "Dermatology", "ED",
+      "Gastro", "Geriatric", "Orthopedics & Rheumatology",
+      "Paediatric", "Renal", "Respiratory", "Stroke", "Urology"
+    )
+    
+    for (nm in seed) {
+      dbExecute(CON,
+                "INSERT INTO specialities (name) VALUES (?) ON CONFLICT (name) DO NOTHING",
+                params = list(nm)
+      )
+    }
+    message("Specialities table seeded with ", length(seed), " entries")
+  } else {
+    message("Specialities table already populated — skipping seed")
+  }
+}
+
 # Core costing table -----------------------------------------------------------
 posting_lines_table <- function() {
   dbExecute(CON, "
@@ -436,6 +513,7 @@ posting_lines_table <- function() {
       staff_group          INTEGER,
       contract_cost        DOUBLE,
       Department           VARCHAR,
+      Staff_Role           VARCHAR,
       contract_price       DOUBLE,
       base_sum             DOUBLE,
       multiplier           DOUBLE,
@@ -458,5 +536,6 @@ db_main <- function() {
   bootstrap_admin()
   build_rules_tables()
   settings_table()
+  specialities_table()
   posting_lines_table()
 }

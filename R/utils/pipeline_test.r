@@ -1,3 +1,4 @@
+setwd('/Users/tategraham/Documents/NHS/RIDS-v1')
 source("R/utils/add_study_arm.r")
 source("R/utils/pipeline_fixed.r")
 source("R/utils/posting_test.r")
@@ -25,12 +26,26 @@ a <- prepare_posting_input(
   ict_db_path   = DB_DIR
 )
 
+View(a)
+
+a_f <- a |> filter(row_category != "BASELINE" & sheet_name == "Setup & Closedown")
+View(a_f)
 
 b <- evaluate_posting_plan(
   prepared_df = a,
   rules_db_path = DB_DIR,
   scenario_id = "A",
 )
+
+setwd('/Users/tategraham/Documents/NHS/R scripts')
+write.csv(b, "rules_test.csv", row.names = FALSE)
+
+View(b)
+
+f_b <- b |> filter(sheet_name == "Setup & Closedown" & row_category != "BASELINE")
+View(f_b)
+filter_b <- b |> filter(row_category != "BASELINE")
+View(filter_b)
 
 
 # 
@@ -48,6 +63,7 @@ b <- evaluate_posting_plan(
 # View(out)
 
 posting_lines_adjusted <- adjust_posting_lines(b)
+View(posting_lines_adjusted)
 message(paste(names(posting_lines_adjusted), collapse = ", "))
 message(paste(sapply(posting_lines_adjusted, class), collapse = ", "))
 
@@ -55,7 +71,9 @@ c <- posting_lines_adjusted |> filter(sheet_name == "AR1001 Treatment phase")
 View(c)
 View(posting_lines_adjusted)
 tm <- build_all_edge_templates(posting_lines_adjusted)
-View(tm)
+View(tm$`AR1001 Treatment phase `)
+View(tm$Pharmacy)
+View(tm$`AR1001 Treatment phase `)
 
 con <- DBI::dbConnect(duckdb::duckdb(), "~/nhs_finance_app_data/RIDS.duckdb")
 posting_lines <- DBI::dbGetQuery(con, "SELECT * FROM posting_lines") |> filter(study_name == "Candy Study")

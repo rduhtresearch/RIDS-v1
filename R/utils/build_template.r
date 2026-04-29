@@ -49,7 +49,8 @@ build_all_edge_templates <- function(data) {
     df |>
       summarise(
         total = sum(adjusted_amount, na.rm = TRUE),
-        .by   = c(Study_Arm, sheet_name, Activity, row_id, staff_group, edge_key)
+        .by   = c(Study_Arm, sheet_name, Activity, row_id, 
+                  staff_group, edge_key, Department)
       ) |>
       mutate(
         `EDGE Project ID`                                      = NA,
@@ -62,7 +63,7 @@ build_all_edge_templates <- function(data) {
         `Cost Category`                                        = "Research Cost",
         `Default Cost`                                         = total,
         `Currency`                                             = "GBP",
-        `Department`                                           = NA,
+        `Department`                                           = Department,
         `Overhead Cost`                                        = NA,
         `Time`                                                 = NA
       ) |>
