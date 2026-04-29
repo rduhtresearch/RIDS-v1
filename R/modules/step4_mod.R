@@ -7,7 +7,8 @@ step4_UI <- function(id) {
       status      = "primary",
       solidHeader = FALSE,
       footer = tagList(
-        downloadButton(ns("download_zip"), "Download ZIP", class = "btn-success")
+        downloadButton(ns("download_zip"), "Download ZIP", class = "btn-success"),
+        actionButton(ns("complete"), "Complete and return to library", class = "btn-primary")
       ),
       div(
         style = "display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;",
@@ -185,6 +186,27 @@ step4_UI <- function(id) {
 
 step4_Server <- function(id, auth_state, shared_state, current_step) {
   moduleServer(id, function(input, output, session) {
+    
+    templates <- reactiveVal(NULL)
+    zip_path  <- reactiveVal(NULL)
+    
+    # ── Reset helper for shared_state ──────────────────────────────────────────
+    reset_shared_state <- function() {
+      shared_state$scenario_id      <- NULL
+      shared_state$edge_id          <- NULL
+      shared_state$cpms_id          <- NULL
+      shared_state$filename         <- NULL
+      shared_state$upload_meta      <- NULL
+      shared_state$raw_ict          <- NULL
+      shared_state$posting_plan     <- NULL
+      shared_state$processed_ict    <- NULL
+      shared_state$evaluated_plan   <- NULL
+      shared_state$edge_templates   <- NULL
+      shared_state$speciality_id    <- NULL
+      shared_state$speciality_name  <- NULL
+      shared_state$current_step     <- NULL
+      shared_state$timestamp        <- NULL
+    }
     
     templates <- reactiveVal(NULL)
     zip_path  <- reactiveVal(NULL)
@@ -378,6 +400,63 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         write_zip(tpls, file)
       }
     )
+    
+    # ── Complete: success modal + navigate + reset ──────────────────────────
+    observeEvent(input$complete, {
+      
+      current_session <- session
+      
+      showModal(modalDialog(
+        title     = NULL,
+        footer    = NULL,
+        easyClose = FALSE,
+        size      = "s",
+        div(
+          style = "text-align: center; padding: 1.5rem 1rem;",
+          div(
+            style = paste(
+              "width: 64px;",
+              "height: 64px;",
+              "border-radius: 50%;",
+              "background: #e6f4ea;",
+              "display: flex;",
+              "align-items: center;",
+              "justify-content: center;",
+              "margin: 0 auto 1rem auto;"
+            ),
+            tags$span(
+              style = "color: #28a745; font-size: 2rem; font-weight: 700;",
+              HTML("&check;")
+            )
+          ),
+          h4(
+            style = "margin-bottom: 0.5rem; color: #1d2a36;",
+            "Study processed successfully"
+          ),
+          p(
+            style = "color: #697786; margin-bottom: 0;",
+            "Opening the study library..."
+          )
+        )
+      ))
+      
+      later::later(function() {
+        shiny::withReactiveDomain(current_session, {
+          removeModal()
+          templates(NULL)
+          zip_path(NULL)
+          reset_shared_state()
+          current_step(NULL)
+          shinyjs::runjs('$("a[data-value=\'tab_library\']").trigger("click")')
+          shinyjs::runjs("$('body').addClass('sidebar-collapse')")
+        })
+      }, delay = 2)
+    })
+    
+    # ── Disable Complete until templates exist ──────────────────────────────
+    observe({
+      shinyjs::toggleState("complete", condition = !is.null(templates()))
+    })
     
   })
 }

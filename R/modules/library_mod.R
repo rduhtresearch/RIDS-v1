@@ -140,23 +140,21 @@ libraryServer <- function(id, auth_state) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # ── Load studies ──────────────────────────────────────────────────────────
-    studies <- reactive({
-      DBI::dbGetQuery(CON,
-                      "SELECT cpms_id, study_name, scenario_id, edge_id, uploaded_by, upload_timestamp
-         FROM meta_data
-         ORDER BY upload_timestamp DESC"
-      )
-    })
-    
     # ── Track selected study ──────────────────────────────────────────────────
     selected_study <- reactiveVal(NULL)
     
+    # ── Wire card click handlers ──────────────────────────────────────────────
     observe({
-      req(nrow(studies()) > 0)
-      lapply(seq_len(nrow(studies())), function(i) {
+      studies <- DBI::dbGetQuery(CON,
+                                 "SELECT cpms_id, study_name, scenario_id, edge_id, uploaded_by, upload_timestamp
+         FROM meta_data
+         ORDER BY upload_timestamp DESC"
+      )
+      req(nrow(studies) > 0)
+      
+      lapply(seq_len(nrow(studies)), function(i) {
         observeEvent(input[[paste0("view_study_", i)]], {
-          selected_study(studies()[i, ])
+          selected_study(studies[i, ])
         }, ignoreInit = TRUE)
       })
     })
@@ -225,12 +223,17 @@ libraryServer <- function(id, auth_state) {
     
     # ── Render cards ──────────────────────────────────────────────────────────
     output$study_cards <- renderUI({
-      req(nrow(studies()) > 0)
+      studies <- DBI::dbGetQuery(CON,
+                                 "SELECT cpms_id, study_name, scenario_id, edge_id, uploaded_by, upload_timestamp
+         FROM meta_data
+         ORDER BY upload_timestamp DESC"
+      )
+      req(nrow(studies) > 0)
       
       div(
         style = "display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; padding: 1rem;",
-        lapply(seq_len(nrow(studies())), function(i) {
-          row <- studies()[i, ]
+        lapply(seq_len(nrow(studies)), function(i) {
+          row <- studies[i, ]
           
           div(
             class = "card",
