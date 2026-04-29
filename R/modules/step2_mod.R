@@ -18,7 +18,7 @@ step2_UI <- function(id) {
 
 step2_Server <- function(id, auth_state, shared_state, current_step) {
   moduleServer(id, function(input, output, session) {
-    
+          
     working_data <- reactiveValues(df = NULL)
     
     # ── Load data ─────────────────────────────────────────────────────────────
@@ -27,10 +27,11 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
       
       df <- DBI::dbGetQuery(
         CON,
-        "SELECT Study, Visit_Number, Study_Arm,
-         Visit_Label, Activity_Name, ICT_Cost, Contract_Cost
+        "SELECT CPMS_ID, Study, Visit_Number, Study_Arm,
+         Visit_Label, Activity_Name, ICT_Cost, Contract_Cost,
+         activity_occurrence_id, staff_group
          FROM ict_costing_tbl WHERE CPMS_ID = ?",
-        params = list(as.character(shared_state$cpms_id))
+         params = list(as.character(shared_state$cpms_id))
       )
       
       working_data$df <- df

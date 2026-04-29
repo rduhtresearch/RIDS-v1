@@ -6,6 +6,7 @@ step1_UI <- function(id) {
     status = "primary",
     solidHeader = FALSE,
     selectInput(ns('scenario'), 'Select Scenario', choices = c("A", "B")),
+    selectInput(ns('speciality_id'), 'Clinical speciality', choices = NULL),
     textInput(ns('edge_id'), 'EDGE ID'),
     textInput(ns('study_name'), 'Study Name'),
     fileInput(ns("upload"), "Choose Excel File",
@@ -19,6 +20,31 @@ step1_UI <- function(id) {
 
 step1_Server <- function(id, auth_state, shared_state, current_step) {
   moduleServer(id, function(input, output, session) {
+    
+    # ── Specialities lookup (loaded once at module init) ─────────────────────
+    specialities <- reactive({
+      dbGetQuery(CON, "
+        SELECT id, name
+        FROM specialities
+        WHERE archived_at IS NULL
+        ORDER BY name
+      ")
+    })
+    
+    observe({
+      sp <- specialities()
+      req(nrow(sp) > 0)
+      
+      choices        <- sp$id
+      names(choices) <- sp$name
+      
+      updateSelectInput(
+        session,
+        "speciality_id",
+        choices  = c("Select speciality..." = "", choices),
+        selected = ""
+      )
+    })
     
     # ── Help ─────────────────────────────────────────────────────────────────
     helpServer("help", content = list(
@@ -37,6 +63,10 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
           body    = "The scenario determines how costs are distributed across posting lines. Select the scenario that matches your study's commercial arrangement."
         ),
         list(
+          heading = "What is Clinical Speciality?",
+          body    = "The clinical area the study sits within. This is required and used for grouping studies in reporting."
+        ),
+        list(
           heading = "FAQ",
           body    = "If you are unsure which scenario to select, contact your R&D finance lead."
         )
@@ -47,13 +77,17 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
     observeEvent(input$next_step, {
       
       # ── Validation ───────────────────────────────────────────────────────
-      feedbackDanger("edge_id", show = input$edge_id == "", text = "Required")
-      feedbackDanger("upload",  show = is.null(input$upload), text = "Required")
+      feedbackDanger("edge_id",       show = input$edge_id == "", text = "Required")
+      feedbackDanger("upload",        show = is.null(input$upload), text = "Required")
+      feedbackDanger("speciality_id", show = is.null(input$speciality_id) || input$speciality_id == "",
+                     text = "Required")
       
       req(
         input$edge_id != "",
         input$scenario,
-        !is.null(input$upload)
+        !is.null(input$upload),
+        !is.null(input$speciality_id),
+        input$speciality_id != ""
       )
       
       # ── Process ──────────────────────────────────────────────────────────
@@ -76,8 +110,9 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       
       DBI::dbExecute(CON,
                      "INSERT INTO meta_data 
-   (cpms_id, scenario_id, edge_id, study_name, notes, uploaded_by, original_filename, saved_file_path)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+   (cpms_id, scenario_id, edge_id, study_name, notes, uploaded_by, 
+    original_filename, saved_file_path, speciality_id)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      params = list(
                        as.character(extracted_cpms),
                        input$scenario,
@@ -86,7 +121,8 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
                        input$notes,
                        auth_state$user_id,
                        original_name,
-                       saved_path
+                       saved_path,
+                       as.integer(input$speciality_id)
                      )
       )
       
@@ -100,14 +136,22 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       
       req(shared_state$processed_ict)
       
-      shared_state$cpms_id      <- extracted_cpms
-      shared_state$scenario_id  <- input$scenario
-      shared_state$upload_meta  <- list(
-        scenario_id = input$scenario,
-        edge_id     = input$edge_id,
-        filename    = original_name,
-        raw_ict     = saved_path,
-        timestamp   = timestamp
+      # ── Resolve speciality name for shared_state ─────────────────────────
+      sp_id   <- as.integer(input$speciality_id)
+      sp_name <- specialities()$name[specialities()$id == sp_id]
+      
+      shared_state$cpms_id          <- extracted_cpms
+      shared_state$scenario_id      <- input$scenario
+      shared_state$speciality_id    <- sp_id
+      shared_state$speciality_name  <- sp_name
+      shared_state$upload_meta      <- list(
+        scenario_id     = input$scenario,
+        edge_id         = input$edge_id,
+        filename        = original_name,
+        raw_ict         = saved_path,
+        timestamp       = timestamp,
+        speciality_id   = sp_id,
+        speciality_name = sp_name
       )
       
       # ── Navigate ─────────────────────────────────────────────────────────
