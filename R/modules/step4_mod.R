@@ -263,6 +263,10 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       if (file.exists(zp)) file.remove(zp)
       zip(zp, files = csv_files, flags = "-j")
       
+      if (!file.exists(zp)) {
+        stop("ZIP archive was not created.")
+      }
+      
       invisible(zp)
     }
     
@@ -390,6 +394,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       filename = function() {
         paste0(shared_state$cpms_id, "_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".zip")
       },
+      contentType = "application/zip",
       content = function(file) {
         tpls <- edited_templates()
         if (is.null(tpls) || length(tpls) == 0) {
@@ -397,7 +402,16 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         }
         
         req(tpls)
-        write_zip(tpls, file)
+        
+        tmp_zip <- tempfile("edge_download_", fileext = ".zip")
+        on.exit(unlink(tmp_zip), add = TRUE)
+        
+        write_zip(tpls, tmp_zip)
+        
+        ok <- file.copy(tmp_zip, file, overwrite = TRUE)
+        if (!ok || !file.exists(file)) {
+          stop("Failed to copy ZIP to the download target.")
+        }
       }
     )
     
