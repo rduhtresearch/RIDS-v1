@@ -50,15 +50,15 @@ build_all_edge_templates <- function(data) {
       summarise(
         total = sum(adjusted_amount, na.rm = TRUE),
         .by   = c(Study_Arm, sheet_name, Activity, row_id, 
-                  staff_group, edge_key, Department)
+                  staff_group, edge_key, Department, study_name, cpms_id)
       ) |>
       mutate(
-        `EDGE Project ID`                                      = NA,
-        `Template Name`                                        = Study_Arm,
-        `Template Level (Project | Participant | ProjectSite)` = "Participant",
-        `Project Arm (Participant only)`                       = NA,
+        `EDGE Project ID`                                      = cpms_id,
+        `Template Name`                                        = paste0(study_name, " - ", Study_Arm),
+        `Template Level (Project | Participant | ProjectSite)` = "tbc",
+        `Project Arm (Participant only)`                       = Study_Arm,
         `Project Site Name (ProjectSite only)`                 = NA,
-        `Cost Item Description`                                = paste0("VISIT - ", str_replace_all(Activity, "\\.", " ")),
+        `Cost Item Description`                                = str_replace_all(Activity, "\\.", " "),
         `Analysis Code`                                        = edge_key,
         `Cost Category`                                        = "Research Cost",
         `Default Cost`                                         = total,

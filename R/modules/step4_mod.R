@@ -340,6 +340,12 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         write_zip(tmpl, zp)
         zip_path(zp)
         
+        # Persist the ZIP path to meta_data for this study
+        dbExecute(CON,
+                  "UPDATE meta_data SET edge_zip_path = ? WHERE cpms_id = ?",
+                  params = list(zp, as.character(shared_state$cpms_id))
+        )
+        
       }, error = function(e) {
         message("Zip error: ", e$message)
         showNotification("Failed to save ZIP", type = "error")

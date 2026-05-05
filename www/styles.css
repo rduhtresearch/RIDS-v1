@@ -8,7 +8,6 @@
   --login-accent-dark: #184c6f;
   --login-shadow: 0 10px 24px rgba(18, 34, 48, 0.06);
   --login-font: "Avenir Next", "Segoe UI", sans-serif;
-Rgoe UI", sans-serif;
 }
 
 body:not(.app-shell) .main-header,
@@ -161,5 +160,3 @@ body:not(.app-shell) .page-shell {
   padding-top: 0.4rem !important;
   padding-bottom: 0.4rem !important;
 }
-
-

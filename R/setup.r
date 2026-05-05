@@ -55,7 +55,8 @@ meta_table <- function() {
       upload_timestamp  TIMESTAMP DEFAULT current_timestamp,
       original_filename VARCHAR,
       saved_file_path   VARCHAR,
-      speciality_id     INTEGER
+      speciality_id     INTEGER,
+      edge_zip_path     VARCHAR
     );"
   )
   
@@ -69,6 +70,11 @@ meta_table <- function() {
   if (!"speciality_id" %in% meta_cols) {
     dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN speciality_id INTEGER;")
     message("meta_data.speciality_id column added")
+  }
+  
+  if (!"edge_zip_path" %in% meta_cols) {
+    dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN edge_zip_path VARCHAR;")
+    message("meta_data.edge_zip_path column added")
   }
   
   message('meta built')

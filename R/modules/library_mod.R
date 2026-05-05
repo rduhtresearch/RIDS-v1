@@ -159,7 +159,7 @@ libraryServer <- function(id, auth_state, shared_state) {
       })
     })
     
-    # ── Show modal with download button ───────────────────────────────────────
+    # ── Open the selected study in the workspace ─────────────────────────────
     observeEvent(selected_study(), {
       req(selected_study())
       row <- selected_study()
@@ -171,43 +171,6 @@ libraryServer <- function(id, auth_state, shared_state) {
       
       selected_study(NULL)
     }, ignoreNULL = TRUE)
-    
-    observeEvent(input$close_modal, {
-      removeModal()
-      selected_study(NULL)
-    })
-    
-    # ── Download handler ──────────────────────────────────────────────────────
-    output$download_posting_lines <- downloadHandler(
-      filename = function() {
-        row <- selected_study()
-        req(row)
-        
-        cpms <- row$cpms_id
-        name <- if (!is.na(row$study_name) && nzchar(row$study_name)) {
-          gsub("[^A-Za-z0-9_-]+", "_", row$study_name)
-        } else {
-          "study"
-        }
-        ts <- format(Sys.time(), "%Y%m%d_%H%M%S")
-        paste0(cpms, "_", name, "_posting_lines_", ts, ".csv")
-      },
-      content = function(file) {
-        row <- selected_study()
-        req(row)
-        
-        df <- DBI::dbGetQuery(CON,
-                              "SELECT * FROM posting_lines WHERE cpms_id = ?",
-                              params = list(as.character(row$cpms_id))
-        )
-        
-        if (nrow(df) == 0) {
-          showNotification("No posting lines found for this study", type = "warning")
-        }
-        
-        write.csv(df, file, row.names = FALSE)
-      }
-    )
     
     # ── Render cards ──────────────────────────────────────────────────────────
     output$study_cards <- renderUI({
@@ -262,7 +225,7 @@ libraryServer <- function(id, auth_state, shared_state) {
                 style = "border-top: 1px solid #f0f4f8; padding-top: 0.75rem;",
                 actionButton(
                   inputId = ns(paste0("view_study_", i)),
-                  label   = tagList(icon("download"), " Download"),
+                  label   = tagList(icon("folder-open"), " Open"),
                   class   = "btn btn-sm btn-outline-primary",
                   style   = "font-size: 0.8rem; font-weight: 600;"
                 )

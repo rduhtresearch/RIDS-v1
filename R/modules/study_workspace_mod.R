@@ -45,6 +45,7 @@ studyWorkspaceServer <- function(id, shared_state) {
       df <- DBI::dbGetQuery(CON,
                             "SELECT m.cpms_id, m.study_name, m.scenario_id, m.edge_id,
                 m.uploaded_by, m.upload_timestamp, m.original_filename, m.notes,
+                m.saved_file_path, m.edge_zip_path,
                 m.speciality_id, s.name AS speciality_name
          FROM meta_data m
          LEFT JOIN specialities s ON m.speciality_id = s.id
@@ -180,6 +181,93 @@ studyWorkspaceServer <- function(id, shared_state) {
         }
       )
       
+      # ── EDGE templates tab content ───────────────────────────────────────
+      edge_zip_exists <- !is.null(meta$edge_zip_path) &&
+        !is.na(meta$edge_zip_path) &&
+        nzchar(meta$edge_zip_path) &&
+        file.exists(meta$edge_zip_path)
+      
+      edge_panel <- div(
+        style = "padding: 1rem;",
+        if (edge_zip_exists) {
+          tagList(
+            p(
+              style = "color: #697786; margin-bottom: 1rem;",
+              "Download the EDGE templates that were generated for this study."
+            ),
+            div(
+              style = "font-size: 0.82rem; color: #697786; margin-bottom: 1rem;",
+              "Generated at upload time — represents the original processing run."
+            ),
+            downloadButton(
+              ns("download_edge_zip"),
+              label = "Download EDGE templates (ZIP)",
+              class = "btn-primary"
+            )
+          )
+        } else {
+          p(
+            style = "color: #aaa; font-style: italic;",
+            "No EDGE templates ZIP found for this study. The file may have been deleted or never generated."
+          )
+        }
+      )
+      
+      # ── Files tab content ────────────────────────────────────────────────
+      file_row <- function(label, path, dl_id, copy_id) {
+        exists <- !is.null(path) && !is.na(path) && nzchar(path) && file.exists(path)
+        
+        div(
+          style = "padding: 0.75rem 0; border-bottom: 1px solid #f0f4f8;",
+          div(
+            style = "display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;",
+            div(
+              style = "font-size: 0.92rem; font-weight: 600; color: #1d2a36;",
+              label
+            ),
+            if (exists) {
+              div(
+                style = "display: flex; gap: 0.5rem;",
+                downloadButton(
+                  ns(dl_id),
+                  label = "Download",
+                  class = "btn-sm btn-outline-primary"
+                ),
+                actionButton(
+                  ns(copy_id),
+                  label = tagList(icon("copy"), " Copy path"),
+                  class = "btn-sm btn-outline-secondary"
+                )
+              )
+            } else {
+              tags$span(style = "color: #aaa; font-style: italic;", "File not found")
+            }
+          ),
+          div(
+            style = paste(
+              "font-family: monospace;",
+              "font-size: 0.78rem;",
+              "color: #697786;",
+              "background: #f7f9fc;",
+              "padding: 0.4rem 0.6rem;",
+              "border-radius: 4px;",
+              "word-break: break-all;"
+            ),
+            if (is.null(path) || is.na(path) || !nzchar(path)) "—" else path
+          )
+        )
+      }
+      
+      files_panel <- div(
+        style = "padding: 1rem;",
+        p(
+          style = "color: #697786; margin-bottom: 1rem;",
+          "Files associated with this study. Use Copy path to grab the location for use in your file explorer."
+        ),
+        file_row("Original ICT workbook", meta$saved_file_path, "download_ict",   "copy_ict"),
+        file_row("EDGE templates (ZIP)",  meta$edge_zip_path,    "download_zip_v2", "copy_zip")
+      )
+      
       # ── Tab structure ────────────────────────────────────────────────────
       bs4Card(
         title       = NULL,
@@ -190,13 +278,15 @@ studyWorkspaceServer <- function(id, shared_state) {
         
         tabsetPanel(
           id = ns("workspace_tabs"),
-          tabPanel("Overview",       overview_panel),
-          tabPanel("Posting lines",  posting_panel)
+          tabPanel("Overview",        overview_panel),
+          tabPanel("Posting lines",   posting_panel),
+          tabPanel("EDGE templates",  edge_panel),
+          tabPanel("Files",           files_panel)
         )
       )
     })
     
-    # ── Download handler ─────────────────────────────────────────────────────
+    # ── Posting lines download ───────────────────────────────────────────────
     output$download_posting_lines <- downloadHandler(
       filename = function() {
         req(shared_state$current_study_id)
@@ -227,6 +317,76 @@ studyWorkspaceServer <- function(id, shared_state) {
         write.csv(df, file, row.names = FALSE)
       }
     )
+    
+    # ── Original ICT download (Files tab) ────────────────────────────────────
+    output$download_ict <- downloadHandler(
+      filename = function() {
+        meta <- study_meta()
+        req(meta)
+        if (!is.na(meta$original_filename) && nzchar(meta$original_filename)) {
+          meta$original_filename
+        } else {
+          "ict_workbook.xlsx"
+        }
+      },
+      content = function(file) {
+        meta <- study_meta()
+        req(meta, !is.na(meta$saved_file_path), file.exists(meta$saved_file_path))
+        file.copy(meta$saved_file_path, file)
+      }
+    )
+    
+    # ── EDGE ZIP download (Files tab) ────────────────────────────────────────
+    output$download_zip_v2 <- downloadHandler(
+      filename = function() {
+        meta <- study_meta()
+        req(meta)
+        paste0(meta$cpms_id, "_edge_templates.zip")
+      },
+      content = function(file) {
+        meta <- study_meta()
+        req(meta, !is.na(meta$edge_zip_path), file.exists(meta$edge_zip_path))
+        file.copy(meta$edge_zip_path, file)
+      }
+    )
+    
+    # ── EDGE ZIP download (EDGE templates tab) ───────────────────────────────
+    output$download_edge_zip <- downloadHandler(
+      filename = function() {
+        meta <- study_meta()
+        req(meta)
+        paste0(meta$cpms_id, "_edge_templates.zip")
+      },
+      content = function(file) {
+        meta <- study_meta()
+        req(meta, !is.na(meta$edge_zip_path), file.exists(meta$edge_zip_path))
+        file.copy(meta$edge_zip_path, file)
+      }
+    )
+    
+    # ── Copy ICT path to clipboard ───────────────────────────────────────────
+    observeEvent(input$copy_ict, {
+      meta <- study_meta()
+      req(meta, !is.na(meta$saved_file_path))
+      
+      shinyjs::runjs(sprintf(
+        "navigator.clipboard.writeText('%s');",
+        gsub("\\\\", "\\\\\\\\", meta$saved_file_path)
+      ))
+      showNotification("Path copied to clipboard", type = "message", duration = 2)
+    })
+    
+    # ── Copy EDGE ZIP path to clipboard ──────────────────────────────────────
+    observeEvent(input$copy_zip, {
+      meta <- study_meta()
+      req(meta, !is.na(meta$edge_zip_path))
+      
+      shinyjs::runjs(sprintf(
+        "navigator.clipboard.writeText('%s');",
+        gsub("\\\\", "\\\\\\\\", meta$edge_zip_path)
+      ))
+      showNotification("Path copied to clipboard", type = "message", duration = 2)
+    })
     
     # ── Back button ──────────────────────────────────────────────────────────
     observeEvent(input$back_to_library, {
