@@ -69,6 +69,7 @@ sidebarServer <- function(id, auth_state, parent_session, current_step) {
           },
           tags$div(
             style = "display:none",
+            menuItem("Study Workspace", tabName = "tab_study", icon = icon("folder-open")),
             menuItem("ICT",        tabName = "tab_step1", icon = icon("file")),
             menuItem("ICT Step 2", tabName = "tab_step2", icon = icon("file")),
             menuItem("ICT Step 3", tabName = "tab_step3", icon = icon("file")),

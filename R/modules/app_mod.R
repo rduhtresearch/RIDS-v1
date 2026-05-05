@@ -6,6 +6,7 @@ appUI <- function(id) {
       tabItem("tab_reporting", reportingUI(NS(id, "reporting"))),
       tabItem("tab_settings",  settingsUI(NS(id, "settings"))),
       tabItem("tab_library",   libraryUI(NS(id, "library"))),
+      tabItem("tab_study",     studyWorkspaceUI(NS(id, "study_workspace"))),
       tabItem("tab_support",   supportUI(NS(id, "support"))),
       tabItem("tab_step1", step1_UI(NS(id, "step1"))),
       tabItem("tab_step2", step2_UI(NS(id, "step2"))),
@@ -32,7 +33,8 @@ appServer <- function(id, auth_state, current_step) {
       processed_ict   = NULL,
       edge_templates  = NULL,
       current_step    = NULL,
-      timestamp       = NULL
+      timestamp       = NULL,
+      current_study_id = NULL
     )
     
     step1_Server("step1", auth_state, shared_state, current_step)
@@ -42,8 +44,9 @@ appServer <- function(id, auth_state, current_step) {
     progressServer("progress", current_step)
     reportingServer("reporting", auth_state)
     settingsServer("settings", auth_state)
-    libraryServer("library", auth_state)
+    libraryServer("library", auth_state, shared_state)
     supportServer("support", auth_state)
+    studyWorkspaceServer("study_workspace", shared_state)
     
     observe({
       shared_state$current_step <- current_step()

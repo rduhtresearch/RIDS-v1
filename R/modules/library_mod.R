@@ -136,7 +136,7 @@ libraryUI <- function(id) {
   )
 }
 
-libraryServer <- function(id, auth_state) {
+libraryServer <- function(id, auth_state, shared_state) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -164,24 +164,12 @@ libraryServer <- function(id, auth_state) {
       req(selected_study())
       row <- selected_study()
       
-      showModal(modalDialog(
-        title     = row$study_name,
-        size      = "m",
-        easyClose = TRUE,
-        footer    = actionButton(ns("close_modal"), "Close", class = "btn-default"),
-        div(
-          style = "padding: 0.5rem 0;",
-          p(
-            style = "color: #697786; margin-bottom: 1rem;",
-            "Download the posting lines for this study as a CSV file."
-          ),
-          downloadButton(
-            ns("download_posting_lines"),
-            label = "Download posting lines (CSV)",
-            class = "btn-primary"
-          )
-        )
-      ))
+      message("Library click — setting current_study_id to: ", row$cpms_id)
+      
+      shared_state$current_study_id <- as.character(row$cpms_id)
+      shinyjs::runjs('$("a[data-value=\'tab_study\']").trigger("click")')
+      
+      selected_study(NULL)
     }, ignoreNULL = TRUE)
     
     observeEvent(input$close_modal, {
