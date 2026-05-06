@@ -13,7 +13,7 @@ step1_UI <- function(id) {
               multiple = FALSE,
               accept = c(".xlsx")),
     textAreaInput(ns("notes"), "Add upload notes"),
-    actionButton(ns('next_step'), 'Next: Review Costs', class = "btn-primary"),
+    actionButton(ns('next_step'), 'Next: Review Costs', class = "pipeline-next-btn"),
     helpUI(ns("help"))
   )
 }

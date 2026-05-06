@@ -24,8 +24,7 @@ source("R/utils/template_build_main.r")
 source("R/utils/posting_lines.r")
 source("R/utils/dev_banner.r")
 source("R/utils/add_cost_centres.r")
-
-
+source("R/utils/assign_edge_keys.r")
 source("R/utils/adjust.r")
 source("R/utils/build_template.r")
 
@@ -66,3 +65,9 @@ onStop(function() {
   message("=== CLOSING DB ===\n")
   dbDisconnect(CON, shutdown = TRUE)
 })
+
+# ==============================================================================
+# Version consts
+# ==============================================================================
+APP_VERSION      <- "0.4.0"
+APP_LAST_UPDATED <- "2026-05-06"

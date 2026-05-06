@@ -9,7 +9,7 @@ step3_UI <- function(id) {
       selectInput(ns("tag_select"), label = NULL, choices = c("TRAINING_FEE"), width = "200px"),
       actionButton(ns("apply_tag"), "Apply Tag", class = "btn-primary"),
       actionButton(ns("save"), "Save", class = "btn-success"),
-      actionButton(ns("next_step"), "Next: Generate Templates", class = "btn-primary")
+      actionButton(ns("next_step"), "Next: Generate Templates", class = "pipeline-next-btn")
     ),
     reactableOutput(ns("table"))
   )

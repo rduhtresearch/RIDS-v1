@@ -527,10 +527,10 @@ posting_lines_table <- function() {
       residual             DOUBLE,
       is_residual_row      BOOLEAN,
       adjusted_sum_check   DOUBLE,
-      diff_check           DOUBLE
+      diff_check           DOUBLE,
+      edge_key             VARCHAR
     );
   ")
-  message("posting_lines table initialised")
 }
 
 ## Main Entry Point ------------------------------------------------------------

@@ -9,7 +9,7 @@ step2_UI <- function(id) {
       footer = tagList(
         actionButton(ns("round_all"), "Round all to nearest £"),
         actionButton(ns("save"), "Save to database", class = "btn-success"),
-        actionButton(ns("next_step"), "Next: Apply Tags", class = "btn-primary")
+        actionButton(ns("next_step"), "Next: Apply Tags", class = "pipeline-next-btn")
       ),
       reactableOutput(ns("table"))
     )

@@ -23,25 +23,12 @@ build_all_edge_templates <- function(data) {
     "Time"
   )
   
-  # ── Assign EDGE keys ──────────────────────────────────────────────────────────
-  
-  special_keys <- data |>
-    filter(sheet_name %in% .SPECIAL_SHEETS) |>
-    distinct(sheet_name, Activity, row_id, staff_group, Study_Arm) |>
-    mutate(edge_key = paste0("EDGE-", str_pad(row_number(), width = 4, pad = "0")))
-  
-  main_keys <- data |>
-    filter(!sheet_name %in% .SPECIAL_SHEETS) |>
-    distinct(Study_Arm, Visit) |>
-    mutate(edge_key = paste0("EDGE-", str_pad(
-      row_number() + nrow(special_keys), width = 4, pad = "0"
-    )))
-  
-  data <- data |>
-    left_join(special_keys, by = c("sheet_name", "Activity", "row_id", "staff_group", "Study_Arm")) |>
-    left_join(main_keys,    by = c("Study_Arm", "Visit")) |>
-    mutate(edge_key = coalesce(edge_key.x, edge_key.y)) |>
-    select(-edge_key.x, -edge_key.y)
+  # NOTE: edge_key is assigned upstream by assign_edge_keys() and arrives on
+  # the posting lines data already populated.
+  if (!"edge_key" %in% names(data)) {
+    stop("build_all_edge_templates(): incoming data is missing 'edge_key'. ",
+         "Make sure assign_edge_keys() runs before this in the pipeline.")
+  }
   
   # ── Build templates ───────────────────────────────────────────────────────────
   

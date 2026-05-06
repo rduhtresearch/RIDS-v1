@@ -19,7 +19,11 @@ source("R/modules/study_workspace_mod.R")
 
 ui <- tagList(
   tags$head(
-    tags$link(rel = "stylesheet", type = "text/css", href = "styles.css"),
+    tags$link(
+      rel = "stylesheet",
+      type = "text/css",
+      href = sprintf("styles.css?v=%s", as.integer(file.info("www/styles.css")$mtime))
+    ),
     tags$script(src = "app-shell.js")
   ),
   dashboardPage(
@@ -48,8 +52,23 @@ ui <- tagList(
       dev_banner(),
       useShinyFeedback(),
       loginUI("login"),
-      appUI("app")
-      
+      appUI("app"),
+      div(
+        style = paste(
+          "position: fixed;",
+          "bottom: 0.5rem;",
+          "left: 50%;",
+          "transform: translateX(-50%);",
+          "padding: 0.3rem 0.8rem;",
+          "font-size: 0.72rem;",
+          "color: #aaa;",
+          "background: rgba(255,255,255,0.85);",
+          "border: 1px solid #eee;",
+          "border-radius: 12px;",
+          "z-index: 1040;"
+        ),
+        paste0("v", APP_VERSION, " · last updated ", APP_LAST_UPDATED)
+      )
     ) 
   )
 )

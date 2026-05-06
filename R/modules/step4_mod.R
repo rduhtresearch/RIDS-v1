@@ -303,6 +303,18 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         return(adjusted)
       })
       
+      adjusted <- tryCatch({
+        assign_edge_keys(adjusted)
+      }, error = function(e) {
+        message("assign_edge_keys error: ", conditionMessage(e))
+        showNotification(
+          paste("Failed to assign EDGE keys:", conditionMessage(e)),
+          type = "error",
+          duration = 10
+        )
+        return(adjusted)
+      })
+      
       tryCatch({
         dbExecute(CON,
                   "DELETE FROM posting_lines WHERE cpms_id = ?",
