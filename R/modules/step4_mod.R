@@ -243,30 +243,49 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     
     write_zip <- function(tpls, zp) {
       tpls <- prepare_for_export(tpls)
-      
       if (length(tpls) == 0) {
         stop("No templates with rows to export.")
       }
-      
+      # Write CSVs locally first
       tmp_dir <- tempfile("edge_export_")
       dir.create(tmp_dir, recursive = TRUE)
       on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
-      
       csv_files <- character(length(tpls))
       for (i in seq_along(tpls)) {
-        nm  <- names(tpls)[i]
-        csv <- file.path(tmp_dir, paste0(nm, ".csv"))
-        write.csv(tpls[[i]], csv, row.names = FALSE)
+        nm <- names(tpls)[i]
+        # Make filename safe
+        safe_nm <- gsub("[^A-Za-z0-9_-]", "_", nm)
+        csv <- file.path(tmp_dir, paste0(safe_nm, ".csv"))
+        write.csv(
+          tpls[[i]],
+          file = csv,
+          row.names = FALSE,
+          na = ""
+        )
         csv_files[i] <- csv
       }
-      
-      if (file.exists(zp)) file.remove(zp)
-      zip(zp, files = csv_files, flags = "-j")
-      
-      if (!file.exists(zp)) {
-        stop("ZIP archive was not created.")
+      if (!all(file.exists(csv_files))) {
+        stop("One or more CSV files were not created before zipping.")
       }
-      
+      # Create ZIP locally first
+      local_zip <- tempfile("edge_zip_", fileext = ".zip")
+      zip::zipr(
+        zipfile = local_zip,
+        files   = csv_files,
+        root    = tmp_dir
+      )
+      if (!file.exists(local_zip) || file.info(local_zip)$size == 0) {
+        stop("ZIP archive was not created locally.")
+      }
+      # Copy final ZIP to network/shared output path
+      out_dir <- dirname(zp)
+      if (!dir.exists(out_dir)) {
+        dir.create(out_dir, recursive = TRUE)
+      }
+      ok <- file.copy(local_zip, zp, overwrite = TRUE)
+      if (!ok || !file.exists(zp) || file.info(zp)$size == 0) {
+        stop("ZIP was created locally but could not be copied to: ", zp)
+      }
       invisible(zp)
     }
     
@@ -328,7 +347,15 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       })
       
       tmpl <- tryCatch({
-        build_all_edge_templates(adjusted)
+      
+        visit_lookup <- dbGetQuery(CON, "
+                        SELECT DISTINCT Study, Study_Arm, Visit_Label, Visit_Number
+                        FROM ict_costing_tbl
+                        WHERE Visit_Label IS NOT NULL
+                      ")
+        
+        templates <- build_all_edge_templates(adjusted, visit_lookup)
+        
       }, error = function(e) {
         message("build_all_edge_templates error: ", e$message)
         showNotification("Failed to build templates", type = "error")
@@ -370,6 +397,29 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     })
     
     # ── Preview selected arm ──────────────────────────────────────────────────
+    # output$preview_table <- renderReactable({
+    #   req(templates())
+    #   req(input$arm_select)
+    #   req(input$arm_select %in% names(templates()))
+    #   
+    #   df <- templates()[[input$arm_select]]
+    #   
+    #   reactable(
+    #     df,
+    #     columns = list(
+    #       Department = colDef(show = FALSE)
+    #     ),
+    #     striped       = TRUE,
+    #     highlight     = TRUE,
+    #     compact       = TRUE,
+    #     rownames      = FALSE,
+    #     pagination    = FALSE,
+    #     height        = 500,
+    #     resizable     = TRUE,
+    #     wrap          = FALSE,
+    #     defaultColDef = colDef(minWidth = 120)
+    #   )
+    # })
     output$preview_table <- renderReactable({
       req(templates())
       req(input$arm_select)
@@ -379,9 +429,6 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       
       reactable(
         df,
-        columns = list(
-          Department = colDef(show = FALSE)
-        ),
         striped       = TRUE,
         highlight     = TRUE,
         compact       = TRUE,

@@ -12,7 +12,8 @@ source("R/utils/posting_lines.r")
 # edge_templates         <- build_all_edge_templates(posting_lines_adjusted)
 
 
-input_file <- '/Users/tategraham/Downloads/(59904) - AriBio - POLARIS-AD - Final to agree to CTA.xlsx'
+# input_file <- '/Users/tategraham/Downloads/(59904) - AriBio - POLARIS-AD - Final to agree to CTA.xlsx'
+input_file <- '/Users/tategraham/Documents/NHS/(60681) - ASPIRE - RDUH iCT - downloaded 09Jun2025 - final to agree to CTA.xlsx'
 # input_file <- '/Users/tategraham/Documents/NHS/R scripts/Refactor/testing_data/candy study.xlsx'
 
 pw <- process_workbook(
@@ -64,6 +65,11 @@ View(filter_b)
 
 posting_lines_adjusted <- adjust_posting_lines(b)
 View(posting_lines_adjusted)
+
+setwd('/Users/tategraham/Documents/NHS')
+# df is your dataframe
+write.csv(posting_lines_adjusted, "aspire_out.csv", row.names = FALSE)
+
 message(paste(names(posting_lines_adjusted), collapse = ", "))
 message(paste(sapply(posting_lines_adjusted, class), collapse = ", "))
 

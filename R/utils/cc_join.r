@@ -1,6 +1,7 @@
 library(dplyr)
 
 df <- read_csv('/Users/tategraham/Documents/NHS/R scripts/rules_test.csv')
+View(df)
 
 add_cost_centres <- function(posting_output) {
   posting_output %>%
@@ -117,8 +118,15 @@ add_cost_centres <- function(posting_output, study_speciality) {
 }
 
 
+df <- read_csv('/Users/tategraham/Documents/NHS/R scripts/rules_test.csv')
 test <- add_cost_centres(df, 'Cardiology')
+
+setwd('/Users/tategraham/Documents/NHS')
+write.csv(test, "cost_centre_test2.csv", row.names = FALSE)
 View(test)
+
+setwd('/Users/tategraham/Documents/NHS')
+write.csv(posting_lines_adjusted, "cost_centre_test.csv", row.names = FALSE)
 
 test2 <- test |> filter(row_category == "SETUP_CLOSE_DEPARTMENTAL")
 View(test2)

@@ -1,11 +1,123 @@
+# suppressPackageStartupMessages({
+#   library(dplyr)
+#   library(stringr)
+# })
+# 
+# build_all_edge_templates <- function(data) {
+#   
+#   .SPECIAL_SHEETS <- c("Unscheduled Activities", "Setup & Closedown", "Pharmacy")
+# # NOTE: new variables may need to be added in the future - this function should be param
+#   
+#   .EDGE_COLS <- c(
+#     "EDGE Project ID",
+#     "Template Name",
+#     "Template Level (Project | Participant | ProjectSite)",
+#     "Project Arm (Participant only)",
+#     "Project Site Name (ProjectSite only)",
+#     "Cost Item Description",
+#     "Analysis Code",
+#     "Cost Category",
+#     "Default Cost",
+#     "Currency",
+#     "Department",
+#     "Overhead Cost",
+#     "Time", 
+#     "Activity Type"
+#   )
+#   
+#   # NOTE: edge_key is assigned upstream by assign_edge_keys() and arrives on
+#   # the posting lines data already populated.
+#   if (!"edge_key" %in% names(data)) {
+#     stop("build_all_edge_templates(): incoming data is missing 'edge_key'. ",
+#          "Make sure assign_edge_keys() runs before this in the pipeline.")
+#   }
+#   
+#   # ── Build templates ───────────────────────────────────────────────────────────
+#   
+#   .build_special <- function(df) {
+#     df |>
+#       summarise(
+#         total = sum(adjusted_amount, na.rm = TRUE),
+#         .by   = c(Study_Arm, sheet_name, Activity, row_id, 
+#                   staff_group, edge_key, Department, study_name, cpms_id)
+#       ) |>
+#       mutate(
+#         `EDGE Project ID`                                      = cpms_id,
+#         `Template Name`                                        = Study_Arm,
+#         `Template Level (Project | Participant | ProjectSite)` = "tbc",
+#         `Project Arm (Participant only)`                       = Study_Arm,
+#         `Project Site Name (ProjectSite only)`                 = NA,
+#         `Cost Item Description`                                = str_replace_all(Activity, "\\.", " "),
+#         `Analysis Code`                                        = edge_key,
+#         `Cost Category`                                        = "Research Cost",
+#         `Default Cost`                                         = total,
+#         `Currency`                                             = "GBP",
+#         `Department`                                           = Department,
+#         `Overhead Cost`                                        = NA,
+#         `Time`                                                 = NA,
+#         `Activity Type`                                        = NA
+#       ) |>
+#       select(all_of(.EDGE_COLS))
+#   }
+#   
+#   .build_main <- function(df) {
+#     visit_keys <- df |>
+#       filter(sheet_name != "Pharmacy") |>
+#       distinct(Study_Arm, Visit, edge_key)
+#     
+#     df |>
+#       summarise(
+#         total = sum(adjusted_amount, na.rm = TRUE),
+#         .by   = c(study_name, Visit, Study_Arm, Visit_Label)
+#       ) |>
+#       left_join(visit_keys, by = c("Study_Arm", "Visit")) |>
+#       mutate(
+#         `EDGE Project ID`                                      = NA,
+#         `Template Name`                                        = Study_Arm,
+#         `Template Level (Project | Participant | ProjectSite)` = "Participant",
+#         `Project Arm (Participant only)`                       = NA,
+#         `Project Site Name (ProjectSite only)`                 = NA,
+#         `Cost Item Description`                                = paste0("VISIT - ", str_replace_all(Visit_Label, "\\.", " ")),
+#         `Analysis Code`                                        = edge_key,
+#         `Cost Category`                                        = "Research Cost",
+#         `Default Cost`                                         = total,
+#         `Currency`                                             = "GBP",
+#         `Department`                                           = NA,
+#         `Overhead Cost`                                        = NA,
+#         `Time`                                                 = NA,
+#         `Activity Type`                                        = NA
+#       ) |>
+#       select(all_of(.EDGE_COLS))
+#   }
+#   
+#   # ── Dispatch and return ───────────────────────────────────────────────────────
+#   
+#   special_data <- data |> filter(sheet_name %in% .SPECIAL_SHEETS)
+#   main_data    <- data |> filter(!sheet_name %in% .SPECIAL_SHEETS | sheet_name == "Pharmacy")
+#   
+#   special_list <- special_data |>
+#     group_by(sheet_name) |>
+#     group_map(~ .build_special(.x), .keep = TRUE) |>
+#     setNames(sort(unique(special_data$sheet_name)))
+#   
+#   main_list <- main_data |>
+#     group_by(Study_Arm) |>
+#     group_map(~ .build_main(.x), .keep = TRUE) |>
+#     setNames(sort(unique(main_data$Study_Arm)))
+#   
+#   c(special_list, main_list)
+# }
+
+
 suppressPackageStartupMessages({
   library(dplyr)
   library(stringr)
 })
 
-build_all_edge_templates <- function(data) {
+build_all_edge_templates <- function(data, visit_lookup) {
   
   .SPECIAL_SHEETS <- c("Unscheduled Activities", "Setup & Closedown", "Pharmacy")
+  # NOTE: new variables may need to be added in the future - this function should be param
   
   .EDGE_COLS <- c(
     "EDGE Project ID",
@@ -20,7 +132,8 @@ build_all_edge_templates <- function(data) {
     "Currency",
     "Department",
     "Overhead Cost",
-    "Time"
+    "Time", 
+    "Activity Type"
   )
   
   # NOTE: edge_key is assigned upstream by assign_edge_keys() and arrives on
@@ -28,6 +141,11 @@ build_all_edge_templates <- function(data) {
   if (!"edge_key" %in% names(data)) {
     stop("build_all_edge_templates(): incoming data is missing 'edge_key'. ",
          "Make sure assign_edge_keys() runs before this in the pipeline.")
+  }
+  
+  if (missing(visit_lookup) || is.null(visit_lookup) || nrow(visit_lookup) == 0) {
+    stop("build_all_edge_templates(): 'visit_lookup' is required and must contain ",
+         "Study, Study_Arm, Visit_Label, Visit_Number.")
   }
   
   # ── Build templates ───────────────────────────────────────────────────────────
@@ -41,9 +159,9 @@ build_all_edge_templates <- function(data) {
       ) |>
       mutate(
         `EDGE Project ID`                                      = cpms_id,
-        `Template Name`                                        = paste0(study_name, " - ", Study_Arm),
+        `Template Name`                                        = sheet_name,
         `Template Level (Project | Participant | ProjectSite)` = "tbc",
-        `Project Arm (Participant only)`                       = Study_Arm,
+        `Project Arm (Participant only)`                       = sheet_name,
         `Project Site Name (ProjectSite only)`                 = NA,
         `Cost Item Description`                                = str_replace_all(Activity, "\\.", " "),
         `Analysis Code`                                        = edge_key,
@@ -52,7 +170,8 @@ build_all_edge_templates <- function(data) {
         `Currency`                                             = "GBP",
         `Department`                                           = Department,
         `Overhead Cost`                                        = NA,
-        `Time`                                                 = NA
+        `Time`                                                 = NA,
+        `Activity Type`                                        = NA
       ) |>
       select(all_of(.EDGE_COLS))
   }
@@ -65,23 +184,30 @@ build_all_edge_templates <- function(data) {
     df |>
       summarise(
         total = sum(adjusted_amount, na.rm = TRUE),
-        .by   = c(study_name, Visit, Study_Arm, Visit_Label)
+        .by   = c(study_name, Visit, Study_Arm)
       ) |>
       left_join(visit_keys, by = c("Study_Arm", "Visit")) |>
+      left_join(
+        visit_lookup |> select(Study, Study_Arm, Visit_Number, Visit_Label),
+        by = c("study_name" = "Study", "Study_Arm", "Visit" = "Visit_Number")
+      ) |>
       mutate(
         `EDGE Project ID`                                      = NA,
         `Template Name`                                        = Study_Arm,
         `Template Level (Project | Participant | ProjectSite)` = "Participant",
         `Project Arm (Participant only)`                       = NA,
         `Project Site Name (ProjectSite only)`                 = NA,
-        `Cost Item Description`                                = paste0("VISIT - ", str_replace_all(Visit_Label, "\\.", " ")),
+        `Cost Item Description`                                = paste0(
+          Visit, " - ", str_replace_all(Visit_Label, "\\.", " ")
+        ),
         `Analysis Code`                                        = edge_key,
         `Cost Category`                                        = "Research Cost",
         `Default Cost`                                         = total,
         `Currency`                                             = "GBP",
-        `Department`                                           = NA,
+        `Department`                                           = "Main Arm",
         `Overhead Cost`                                        = NA,
-        `Time`                                                 = NA
+        `Time`                                                 = NA,
+        `Activity Type`                                        = NA
       ) |>
       select(all_of(.EDGE_COLS))
   }

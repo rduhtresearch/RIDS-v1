@@ -11,6 +11,7 @@ library(shinyFeedback)
 library(shinyjs)
 library(reactable)
 library(DT)
+library(zip)
 
 # ==============================================================================
 # SOURCE UTILS
