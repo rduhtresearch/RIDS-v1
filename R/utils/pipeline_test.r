@@ -63,6 +63,7 @@ View(filter_b)
 # class(out)
 # View(out)
 
+
 posting_lines_adjusted <- adjust_posting_lines(b)
 View(posting_lines_adjusted)
 

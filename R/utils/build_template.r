@@ -114,7 +114,7 @@ suppressPackageStartupMessages({
   library(stringr)
 })
 
-build_all_edge_templates <- function(data, visit_lookup) {
+build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   
   .SPECIAL_SHEETS <- c("Unscheduled Activities", "Setup & Closedown", "Pharmacy")
   # NOTE: new variables may need to be added in the future - this function should be param
@@ -158,9 +158,9 @@ build_all_edge_templates <- function(data, visit_lookup) {
                   staff_group, edge_key, Department, study_name, cpms_id)
       ) |>
       mutate(
-        `EDGE Project ID`                                      = cpms_id,
+        `EDGE Project ID`                                      = edge_id,
         `Template Name`                                        = sheet_name,
-        `Template Level (Project | Participant | ProjectSite)` = "tbc",
+        `Template Level (Project | Participant | ProjectSite)` = "Project",
         `Project Arm (Participant only)`                       = sheet_name,
         `Project Site Name (ProjectSite only)`                 = NA,
         `Cost Item Description`                                = str_replace_all(Activity, "\\.", " "),
@@ -192,9 +192,9 @@ build_all_edge_templates <- function(data, visit_lookup) {
         by = c("study_name" = "Study", "Study_Arm", "Visit" = "Visit_Number")
       ) |>
       mutate(
-        `EDGE Project ID`                                      = NA,
+        `EDGE Project ID`                                      = edge_id,
         `Template Name`                                        = Study_Arm,
-        `Template Level (Project | Participant | ProjectSite)` = "Participant",
+        `Template Level (Project | Participant | ProjectSite)` = "Project",
         `Project Arm (Participant only)`                       = NA,
         `Project Site Name (ProjectSite only)`                 = NA,
         `Cost Item Description`                                = paste0(

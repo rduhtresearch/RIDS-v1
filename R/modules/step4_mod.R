@@ -237,8 +237,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     
     # ── Helpers ──────────────────────────────────────────────────────────────
     prepare_for_export <- function(tpls) {
-      tpls <- Filter(function(d) !is.null(d) && nrow(d) > 0, tpls)
-      lapply(tpls, function(d) dplyr::select(d, -dplyr::any_of("Department")))
+      Filter(function(d) !is.null(d) && nrow(d) > 0, tpls)
     }
     
     write_zip <- function(tpls, zp) {
@@ -354,7 +353,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
                         WHERE Visit_Label IS NOT NULL
                       ")
         
-        templates <- build_all_edge_templates(adjusted, visit_lookup)
+        templates <- build_all_edge_templates(adjusted, visit_lookup, shared_state$upload_meta$edge_id)
         
       }, error = function(e) {
         message("build_all_edge_templates error: ", e$message)
