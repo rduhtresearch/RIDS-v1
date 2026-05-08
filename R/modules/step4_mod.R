@@ -236,12 +236,33 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     )
     
     # ── Helpers ──────────────────────────────────────────────────────────────
+    
     prepare_for_export <- function(tpls) {
       Filter(function(d) !is.null(d) && nrow(d) > 0, tpls)
     }
     
+    # Department is internal-only — drives builder read-only logic.
+    # EDGE expects it blank on import, and the top preview represents the export.
+    blank_department <- function(tpls) {
+      lapply(tpls, function(d) {
+        if ("Department" %in% names(d)) d$Department <- NA
+        d
+      })
+    }
+    
+    # prepare_for_export <- function(tpls) {
+    #   Filter(function(d) !is.null(d) && nrow(d) > 0, tpls)
+    # }
+    
     write_zip <- function(tpls, zp) {
+      
       tpls <- prepare_for_export(tpls)
+      if (length(tpls) == 0) {
+        stop("No templates with rows to export.")
+      }
+      tpls <- blank_department(tpls)
+      
+      
       if (length(tpls) == 0) {
         stop("No templates with rows to export.")
       }
@@ -420,11 +441,14 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     #   )
     # })
     output$preview_table <- renderReactable({
-      req(templates())
       req(input$arm_select)
-      req(input$arm_select %in% names(templates()))
       
-      df <- templates()[[input$arm_select]]
+      tpls <- edited_templates()
+      if (is.null(tpls) || length(tpls) == 0) tpls <- templates()
+      
+      req(tpls, input$arm_select %in% names(tpls))
+      
+      df <- blank_department(tpls)[[input$arm_select]]
       
       reactable(
         df,

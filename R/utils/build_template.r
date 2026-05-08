@@ -168,7 +168,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
         `Cost Category`                                        = "Research Cost",
         `Default Cost`                                         = total,
         `Currency`                                             = "GBP",
-        `Department`                                           = NA,
+        `Department`                                           = Department,
         `Overhead Cost`                                        = NA,
         `Time`                                                 = NA,
         `Activity Type`                                        = NA
