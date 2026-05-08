@@ -90,6 +90,37 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
         input$speciality_id != ""
       )
       
+      ###
+      # ── Validation ────────────────────────────────────────────────────────
+      validation <- tryCatch(
+        validate_ict_workbook(input$upload$datapath),
+        error = function(e) {
+          list(valid = FALSE, findings = paste("Validation error:", conditionMessage(e)))
+        }
+      )
+      
+      if (!isTRUE(validation$valid)) {
+        showModal(modalDialog(
+          title = "ICT workbook validation failed",
+          size  = "m",
+          easyClose = FALSE,
+          footer = modalButton("Close"),
+          div(
+            style = "padding: 0.5rem 0;",
+            p(
+              style = "color: #697786; margin-bottom: 1rem;",
+              "The uploaded workbook contains data outside the expected structure. ",
+              "Please remove the highlighted content and re-upload."
+            ),
+            tags$ul(
+              style = "padding-left: 1.25rem; color: #1d2a36;",
+              lapply(validation$findings, tags$li)
+            )
+          )
+        ))
+        return()  # block — do not proceed to file.copy / DB insert
+      }
+      ###
       # ── Process ──────────────────────────────────────────────────────────
       timestamp     <- format(Sys.time(), "%Y%m%d_%H%M%S")
       original_name <- input$upload$name

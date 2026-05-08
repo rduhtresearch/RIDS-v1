@@ -160,7 +160,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
       mutate(
         `EDGE Project ID`                                      = edge_id,
         `Template Name`                                        = sheet_name,
-        `Template Level (Project | Participant | ProjectSite)` = "Project",
+        `Template Level (Project | Participant | ProjectSite)` = NA,
         `Project Arm (Participant only)`                       = sheet_name,
         `Project Site Name (ProjectSite only)`                 = NA,
         `Cost Item Description`                                = str_replace_all(Activity, "\\.", " "),
@@ -168,7 +168,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
         `Cost Category`                                        = "Research Cost",
         `Default Cost`                                         = total,
         `Currency`                                             = "GBP",
-        `Department`                                           = Department,
+        `Department`                                           = NA,
         `Overhead Cost`                                        = NA,
         `Time`                                                 = NA,
         `Activity Type`                                        = NA
@@ -191,10 +191,11 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
         visit_lookup |> select(Study, Study_Arm, Visit_Number, Visit_Label),
         by = c("study_name" = "Study", "Study_Arm", "Visit" = "Visit_Number")
       ) |>
+      arrange(Visit) |>
       mutate(
         `EDGE Project ID`                                      = edge_id,
         `Template Name`                                        = Study_Arm,
-        `Template Level (Project | Participant | ProjectSite)` = "Project",
+        `Template Level (Project | Participant | ProjectSite)` = NA,
         `Project Arm (Participant only)`                       = NA,
         `Project Site Name (ProjectSite only)`                 = NA,
         `Cost Item Description`                                = paste0(
@@ -204,7 +205,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
         `Cost Category`                                        = "Research Cost",
         `Default Cost`                                         = total,
         `Currency`                                             = "GBP",
-        `Department`                                           = "Main Arm",
+        `Department`                                           = NA,
         `Overhead Cost`                                        = NA,
         `Time`                                                 = NA,
         `Activity Type`                                        = NA

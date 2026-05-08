@@ -28,6 +28,7 @@ source("R/utils/add_cost_centres.r")
 source("R/utils/assign_edge_keys.r")
 source("R/utils/adjust.r")
 source("R/utils/build_template.r")
+source("R/utils/validate_ict_workbook.r")
 
 # ==============================================================================
 # GLOBAL CONFIGURATION & INITIALIZATION

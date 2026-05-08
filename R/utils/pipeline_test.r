@@ -11,6 +11,10 @@ source("R/utils/posting_lines.r")
 # posting_lines_adjusted <- adjust_posting_lines(out)
 # edge_templates         <- build_all_edge_templates(posting_lines_adjusted)
 
+t <- read.xlsx('/Users/tategraham/Downloads/(67274) - C4771002 - RDUH iCT - Final to agree to CTA.xlsx')
+y <- read.xlsx('/Users/tategraham/Documents/NHS/R scripts/Refactor/testing_data/candy study.xlsx')
+View(y)
+View(t)
 
 # input_file <- '/Users/tategraham/Downloads/(59904) - AriBio - POLARIS-AD - Final to agree to CTA.xlsx'
 input_file <- '/Users/tategraham/Documents/NHS/(60681) - ASPIRE - RDUH iCT - downloaded 09Jun2025 - final to agree to CTA.xlsx'
