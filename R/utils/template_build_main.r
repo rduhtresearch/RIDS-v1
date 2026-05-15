@@ -77,7 +77,7 @@ adjust_postings <- function(df, group_vars) {
 #' Adjust posting amounts to match contract price.
 #'
 #' Special sheets (UA, SC) are grouped per-activity.
-#' All other sheets (including Pharmacy) are grouped per-visit.
+#' All other sheets are grouped per-visit within Study_Arm.
 adjust_posting_lines <- function(out) {
   bind_rows(
     # UA and SC: adjust per activity
@@ -85,11 +85,11 @@ adjust_posting_lines <- function(out) {
       filter(sheet_name %in% ADJUSTMENT_SPECIAL) %>%
       adjust_postings(c("row_id", "Activity", "staff_group", "scenario_id")),
     
-    # Everything else: adjust per visit
+    # Everything else: adjust per visit within Study_Arm
     out %>%
       filter(!sheet_name %in% ADJUSTMENT_SPECIAL) %>%
       mutate(adj_group = trimws(
-        if_else(sheet_name == "Pharmacy", Study_Arm, sheet_name)
+        coalesce(Study_Arm, sheet_name)
       )) %>%
       adjust_postings(c("adj_group", "Visit", "scenario_id")) %>%
       select(-adj_group)
