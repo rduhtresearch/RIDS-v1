@@ -12,16 +12,13 @@ appUI <- function(id) {
       tabItem("tab_step2", step2_UI(NS(id, "step2"))),
       tabItem("tab_step3", step3_UI(NS(id, "step3"))),
       tabItem("tab_step4", step4_UI(NS(id, "step4"))),
-      tabItem("tab_admin", adminUI("admin"))
+      tabItem("tab_admin", uiOutput(NS(id, "admin_tab")))
     )
   )
 }
 
 appServer <- function(id, auth_state, current_step) {
   moduleServer(id, function(input, output, session) {
-    
-    step <- reactiveVal(0) 
-    
     shared_state <- reactiveValues(
       scenario_id     = NULL,
       edge_id         = NULL,
@@ -36,6 +33,22 @@ appServer <- function(id, auth_state, current_step) {
       timestamp       = NULL,
       current_study_id = NULL
     )
+
+    session$userData$reset_app_state <- function() {
+      shared_state$scenario_id <- NULL
+      shared_state$edge_id <- NULL
+      shared_state$cpms_id <- NULL
+      shared_state$filename <- NULL
+      shared_state$upload_meta <- NULL
+      shared_state$raw_ict <- NULL
+      shared_state$posting_plan <- NULL
+      shared_state$processed_ict <- NULL
+      shared_state$edge_templates <- NULL
+      shared_state$current_step <- NULL
+      shared_state$timestamp <- NULL
+      shared_state$current_study_id <- NULL
+      current_step(NULL)
+    }
     
     step1_Server("step1", auth_state, shared_state, current_step)
     step2_Server("step2", auth_state, shared_state, current_step)
@@ -47,6 +60,19 @@ appServer <- function(id, auth_state, current_step) {
     libraryServer("library", auth_state, shared_state)
     supportServer("support", auth_state)
     studyWorkspaceServer("study_workspace", shared_state)
+
+    output$admin_tab <- renderUI({
+      if (!isTRUE(is_admin(auth_state$role))) {
+        return(
+          div(
+            style = "padding: 1.5rem; color: #697786;",
+            "Admin access is required for this area."
+          )
+        )
+      }
+
+      adminUI("admin")
+    })
     
     observe({
       shared_state$current_step <- current_step()

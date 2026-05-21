@@ -35,6 +35,10 @@ body:not(.app-shell) .content-wrapper > .content {
   padding: 0;
 }
 
+body:not(.app-shell) .content-wrapper > .content > :not(#login-overlay) {
+  display: none !important;
+}
+
 body:not(.app-shell) .page-shell {
   flex: 1 1 auto;
   min-height: 100vh;

@@ -16,7 +16,6 @@ source("R/dependencies.R")
 DB_DIR          <- "/Users/tategraham/Documents/NHS/RIDS_/RIDS/data/RIDS.duckdb"
 ICT_UPLOAD_DIR  <- "/Users/tategraham/Documents/NHS/RIDS_/RIDS/uploads"
 EDGE_OUTPUT_DIR <- "/Users/tategraham/Documents/NHS/RIDS_/RIDS/outputs"
-ADMIN_USERNAME  <- "admin"  # your admin account username
 
 # 3. Write config.R ------------------------------------------------------------
 writeLines(
@@ -52,29 +51,6 @@ message("✓ Connected to DB: ", DB_DIR)
 source("R/utils/auth.r")
 source("R/setup.r")
 
-# Override bootstrap_admin to use the configured username
-bootstrap_admin <- function() {
-  count <- dbGetQuery(CON, "SELECT COUNT(*) AS n FROM users")$n
-  if (count == 0) {
-    message("Bootstrapping admin user: ", ADMIN_USERNAME)
-    dbExecute(CON,
-              "INSERT INTO users (username, role) VALUES (?, ?)",
-              params = list(ADMIN_USERNAME, "admin")
-    )
-    user_id <- dbGetQuery(CON,
-                          "SELECT id FROM users WHERE username = ?",
-                          params = list(ADMIN_USERNAME)
-    )$id
-    token <- generate_token(user_id)
-    message("╔══════════════════════════════════════╗")
-    message("║  ADMIN SETUP TOKEN (expires 24hrs)   ║")
-    message("║  ", token, "  ║")
-    message("╚══════════════════════════════════════╝")
-  } else {
-    message("  Users table already populated — skipping admin bootstrap")
-  }
-}
-
 db_main()
 dbDisconnect(CON, shutdown = TRUE)
 message("✓ Database initialised")
@@ -82,6 +58,6 @@ message("✓ Database initialised")
 # 6. Done ----------------------------------------------------------------------
 message("")
 message("╔══════════════════════════════════════════════════════╗")
-message("║  Setup complete. Use the token above to activate     ║")
-message("║  your admin account, then launch app.R               ║")
+message("║  Setup complete. Launch app.R and create the first   ║")
+message("║  admin account from the in-app bootstrap screen.     ║")
 message("╚══════════════════════════════════════════════════════╝")

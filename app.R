@@ -10,7 +10,7 @@ source("R/modules/step2_mod.R")
 source("R/modules/step3_mod.R")
 source("R/modules/step4_mod.R")
 source("R/modules/support_mod.R")
-source("R/modules/admin_mod.R")
+source("R/modules/admin_mod.r")
 source("R/modules/progress_mod.R")
 source("R/modules/help_mod.R")
 source("R/modules/library_mod.R")
@@ -83,15 +83,15 @@ server <- function(input, output, session) {
       style = "display: flex; align-items: center; gap: 0.5rem; padding: 0 1rem;",
       span(
         style = "font-size: 0.85rem; font-weight: 600; color: #1d2a36;",
-        auth_state$username
+        auth_state$name %||% auth_state$username
       ),
       span(
         style = sprintf(
           "background: %s; color: %s; padding: 0.2rem 0.6rem; border-radius: 1rem; font-size: 0.75rem; font-weight: 600;",
-          if (isTRUE(auth_state$role == "admin")) "#e8f4fd" else "#f0f4f8",
-          if (isTRUE(auth_state$role == "admin")) "#1f5f8b" else "#6c757d"
+          if (isTRUE(is_admin(auth_state$role))) "#e8f4fd" else "#f0f4f8",
+          if (isTRUE(is_admin(auth_state$role))) "#1f5f8b" else "#6c757d"
         ),
-        if (isTRUE(auth_state$role == "admin")) "Admin" else "User"
+        tools::toTitleCase(auth_state$role %||% "user")
       )
     )
   })
@@ -110,15 +110,34 @@ server <- function(input, output, session) {
   })
 
   observe({
-    session$sendCustomMessage("setAppShell", isTRUE(auth_state$logged_in))
+    if (!isTRUE(is_admin(auth_state$role)) && identical(input$sidebar, "tab_admin")) {
+      updateTabItems(session, "sidebar", selected = "tab_dashboard")
+    }
+  })
+
+  observe({
+    session$sendCustomMessage(
+      "setAppShell",
+      isTRUE(auth_state$auth_ready) &&
+        isTRUE(auth_state$logged_in) &&
+        !isTRUE(auth_state$must_change_password)
+    )
   })
   
   observe({
-    if (auth_state$logged_in) {
+    if (!isTRUE(auth_state$auth_ready)) {
+      shinyjs::hide("login-overlay")
+      return()
+    }
+
+    if (isTRUE(auth_state$logged_in) && !isTRUE(auth_state$must_change_password)) {
       shinyjs::hide("login-overlay")
       updateTabItems(session, "sidebar", selected = "tab_dashboard")
     } else {
       shinyjs::show("login-overlay")
+      if (!isTRUE(auth_state$logged_in)) {
+        updateTabItems(session, "sidebar", selected = "tab_dashboard")
+      }
     }
   })
   

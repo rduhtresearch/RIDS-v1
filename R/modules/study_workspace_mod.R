@@ -43,9 +43,17 @@ studyWorkspaceServer <- function(id, shared_state) {
       req(shared_state$current_study_id)
       
       df <- DBI::dbGetQuery(CON,
-                            "SELECT m.cpms_id, m.study_name, m.scenario_id, m.edge_id,
-                m.uploaded_by, m.upload_timestamp, m.original_filename, m.notes,
-                m.saved_file_path, m.edge_zip_path,
+                            "SELECT
+                REPLACE(m.cpms_id, chr(0), '') AS cpms_id,
+                REPLACE(m.study_name, chr(0), '') AS study_name,
+                REPLACE(m.scenario_id, chr(0), '') AS scenario_id,
+                REPLACE(m.edge_id, chr(0), '') AS edge_id,
+                REPLACE(m.uploaded_by, chr(0), '') AS uploaded_by,
+                m.upload_timestamp,
+                REPLACE(m.original_filename, chr(0), '') AS original_filename,
+                REPLACE(m.notes, chr(0), '') AS notes,
+                REPLACE(m.saved_file_path, chr(0), '') AS saved_file_path,
+                REPLACE(m.edge_zip_path, chr(0), '') AS edge_zip_path,
                 m.speciality_id, s.name AS speciality_name
          FROM meta_data m
          LEFT JOIN specialities s ON m.speciality_id = s.id

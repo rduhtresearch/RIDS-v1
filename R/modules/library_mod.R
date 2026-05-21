@@ -146,7 +146,13 @@ libraryServer <- function(id, auth_state, shared_state) {
     # ── Wire card click handlers ──────────────────────────────────────────────
     observe({
       studies <- DBI::dbGetQuery(CON,
-                                 "SELECT cpms_id, study_name, scenario_id, edge_id, uploaded_by, upload_timestamp
+                                 "SELECT
+            REPLACE(cpms_id, chr(0), '') AS cpms_id,
+            REPLACE(study_name, chr(0), '') AS study_name,
+            REPLACE(scenario_id, chr(0), '') AS scenario_id,
+            REPLACE(edge_id, chr(0), '') AS edge_id,
+            REPLACE(uploaded_by, chr(0), '') AS uploaded_by,
+            upload_timestamp
          FROM meta_data
          ORDER BY upload_timestamp DESC"
       )
@@ -175,7 +181,13 @@ libraryServer <- function(id, auth_state, shared_state) {
     # ── Render cards ──────────────────────────────────────────────────────────
     output$study_cards <- renderUI({
       studies <- DBI::dbGetQuery(CON,
-                                 "SELECT cpms_id, study_name, scenario_id, edge_id, uploaded_by, upload_timestamp
+                                 "SELECT
+            REPLACE(cpms_id, chr(0), '') AS cpms_id,
+            REPLACE(study_name, chr(0), '') AS study_name,
+            REPLACE(scenario_id, chr(0), '') AS scenario_id,
+            REPLACE(edge_id, chr(0), '') AS edge_id,
+            REPLACE(uploaded_by, chr(0), '') AS uploaded_by,
+            upload_timestamp
          FROM meta_data
          ORDER BY upload_timestamp DESC"
       )

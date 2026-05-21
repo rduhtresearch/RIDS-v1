@@ -78,37 +78,117 @@ meta_table <- function() {
     dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN edge_zip_path VARCHAR;")
     message("meta_data.edge_zip_path column added")
   }
+
+  tryCatch({
+    dbExecute(CON, "
+      UPDATE meta_data
+      SET
+        cpms_id = REPLACE(cpms_id, chr(0), ''),
+        scenario_id = REPLACE(scenario_id, chr(0), ''),
+        edge_id = REPLACE(edge_id, chr(0), ''),
+        study_name = REPLACE(study_name, chr(0), ''),
+        notes = REPLACE(notes, chr(0), ''),
+        uploaded_by = REPLACE(uploaded_by, chr(0), ''),
+        original_filename = REPLACE(original_filename, chr(0), ''),
+        saved_file_path = REPLACE(saved_file_path, chr(0), ''),
+        edge_zip_path = REPLACE(edge_zip_path, chr(0), '')
+      WHERE
+        strpos(cpms_id, chr(0)) > 0 OR
+        strpos(scenario_id, chr(0)) > 0 OR
+        strpos(edge_id, chr(0)) > 0 OR
+        strpos(study_name, chr(0)) > 0 OR
+        strpos(notes, chr(0)) > 0 OR
+        strpos(uploaded_by, chr(0)) > 0 OR
+        strpos(original_filename, chr(0)) > 0 OR
+        strpos(saved_file_path, chr(0)) > 0 OR
+        strpos(edge_zip_path, chr(0)) > 0;
+    ")
+  }, error = function(e) {
+    message("meta_data null-byte cleanup skipped: ", e$message)
+  })
   
   message('meta built')
 }
 ## User tables -----------------------------------------------------------------
 user_tables <- function() {
-  queries <- c(
-    "CREATE SEQUENCE IF NOT EXISTS user_id_seq;",
-    
-    "CREATE TABLE IF NOT EXISTS users (
-      id            INTEGER PRIMARY KEY DEFAULT nextval('user_id_seq'),
-      username      TEXT UNIQUE NOT NULL,
-      password_hash TEXT,
-      role          TEXT NOT NULL DEFAULT 'user',
-      created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      last_login    TIMESTAMP
-    );",
-    
-    "CREATE TABLE IF NOT EXISTS tokens (
-      token         TEXT PRIMARY KEY,
-      user_id       INTEGER NOT NULL,
-      expires_at    TIMESTAMP NOT NULL,
-      used          BOOLEAN DEFAULT FALSE,
-      created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    );"
-  )
-  
   tryCatch({
-    for (query in queries) {
-      dbExecute(CON, query)
+    existing_tables <- tryCatch(dbListTables(CON), error = function(e) character())
+    recreate_auth_tables <- FALSE
+
+    if ("users" %in% existing_tables) {
+      existing_cols <- dbListFields(CON, "users")
+      expected_cols <- c(
+        "user_id", "name", "username", "email", "password_hash", "role",
+        "active", "force_password_change", "created_at", "updated_at", "last_login_at"
+      )
+
+      if (!setequal(existing_cols, expected_cols)) {
+        recreate_auth_tables <- TRUE
+      }
     }
+
+    if ("tokens" %in% existing_tables) {
+      recreate_auth_tables <- TRUE
+    }
+
+    if (recreate_auth_tables) {
+      dbExecute(CON, "DROP TABLE IF EXISTS auth_audit_log;")
+      dbExecute(CON, "DROP TABLE IF EXISTS auth_sessions;")
+      dbExecute(CON, "DROP TABLE IF EXISTS tokens;")
+      dbExecute(CON, "DROP TABLE IF EXISTS users;")
+      dbExecute(CON, "DROP SEQUENCE IF EXISTS auth_audit_id_seq;")
+      dbExecute(CON, "DROP SEQUENCE IF EXISTS auth_session_id_seq;")
+      dbExecute(CON, "DROP SEQUENCE IF EXISTS user_id_seq;")
+      message("Existing pre-live auth schema reset")
+    }
+
+    dbExecute(CON, "CREATE SEQUENCE IF NOT EXISTS user_id_seq;")
+    dbExecute(CON, "CREATE SEQUENCE IF NOT EXISTS auth_session_id_seq;")
+    dbExecute(CON, "CREATE SEQUENCE IF NOT EXISTS auth_audit_id_seq;")
+
+    dbExecute(CON, "
+      CREATE TABLE IF NOT EXISTS users (
+        user_id                INTEGER PRIMARY KEY DEFAULT nextval('user_id_seq'),
+        name                   TEXT,
+        username               TEXT UNIQUE NOT NULL,
+        email                  TEXT,
+        password_hash          TEXT,
+        role                   TEXT NOT NULL DEFAULT 'user',
+        active                 BOOLEAN NOT NULL DEFAULT TRUE,
+        force_password_change  BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_login_at          TIMESTAMP
+      );
+    ")
+
+    dbExecute(CON, "
+      CREATE TABLE IF NOT EXISTS auth_sessions (
+        session_id    INTEGER PRIMARY KEY DEFAULT nextval('auth_session_id_seq'),
+        user_id       INTEGER NOT NULL,
+        token_hash    TEXT NOT NULL,
+        expires_at    TIMESTAMP NOT NULL,
+        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        revoked_at    TIMESTAMP,
+        user_agent    TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+      );
+    ")
+
+    dbExecute(CON, "
+      CREATE TABLE IF NOT EXISTS auth_audit_log (
+        audit_id       INTEGER PRIMARY KEY DEFAULT nextval('auth_audit_id_seq'),
+        timestamp      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        event_type     TEXT NOT NULL,
+        user_id        INTEGER,
+        actor_user_id  INTEGER,
+        username       TEXT,
+        success        BOOLEAN NOT NULL DEFAULT TRUE,
+        message        TEXT,
+        session_id     INTEGER
+      );
+    ")
+
     message("User tables initialised")
   }, error = function(e) {
     stop("Failed to initialise user tables: ", e$message)
@@ -117,28 +197,7 @@ user_tables <- function() {
 
 ## Populate user tables --------------------------------------------------------
 seed_users <- function() {
-  # 4. Check if the users table is already populated
-  user_count <- dbGetQuery(CON, "SELECT COUNT(*) AS count FROM users")$count
-  
-  if (user_count == 0) {
-    message("Seeding database with initial users...")
-    
-    # 5. Define the seed data
-    seed_users <- data.frame(
-      id = c(1, 2),
-      username = c("admin_user", "dev_user"),
-      password_hash = c(hash_password("admin123"), 
-                        hash_password("dev123")),
-      role = c("admin", "developer"),
-      stringsAsFactors = FALSE
-    )
-    
-    # 6. Insert the data
-    dbAppendTable(CON, "users", seed_users)
-    message("Seeding complete: Added ", nrow(seed_users), " users.")
-  } else {
-    message("Users table already contains data. Skipping seeding.")
-  }
+  message("Auth user seeding disabled for pre-live bootstrap flow.")
 }
 
 ## Rules tables ----------------------------------------------------------------
@@ -415,25 +474,8 @@ build_rules_tables <- function() {
   print(dbGetQuery(CON, "SELECT scenario_id, COUNT(*) AS n FROM routing_rules GROUP BY scenario_id ORDER BY scenario_id;"))
 }
 
-# temp (for admin account)
 bootstrap_admin <- function() {
-  count <- dbGetQuery(CON, "SELECT COUNT(*) AS n FROM users")$n
-  
-  if (count == 0) {
-    message("Bootstrapping admin user...")
-    
-    dbExecute(CON,
-              "INSERT INTO users (username, role) VALUES (?, ?)",
-              params = list("tate", "admin")
-    )
-    
-    user_id <- dbGetQuery(CON,
-                          "SELECT id FROM users WHERE username = 'tate'"
-    )$id
-    
-    token <- generate_token(user_id)
-    message("=== ADMIN TOKEN: ", token, " ===")
-  }
+  message("Admin bootstrap is handled in-app on first login.")
 }
 
 # Admin settings tables --------------------------------------------------------
@@ -541,7 +583,6 @@ db_main <- function() {
   meta_table()
   init_db()
   user_tables()
-  bootstrap_admin()
   build_rules_tables()
   settings_table()
   specialities_table()

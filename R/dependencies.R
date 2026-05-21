@@ -10,6 +10,7 @@ required_packages <- c(
   "shinyjs",
   "reactable",
   "DT",
+  "jsonlite",
   "dplyr",
   "tidyr",
   "stringr",

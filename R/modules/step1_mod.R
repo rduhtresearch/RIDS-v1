@@ -145,14 +145,14 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
     original_filename, saved_file_path, speciality_id)
    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      params = list(
-                       as.character(extracted_cpms),
-                       input$scenario,
-                       input$edge_id,
-                       input$study_name,
-                       input$notes,
-                       auth_state$user_id,
-                       original_name,
-                       saved_path,
+                       sanitize_text_value(as.character(extracted_cpms)),
+                       sanitize_text_value(input$scenario),
+                       sanitize_text_value(input$edge_id),
+                       sanitize_text_value(input$study_name),
+                       sanitize_text_value(input$notes),
+                       sanitize_text_value(auth_state$username %||% auth_state$name %||% ""),
+                       sanitize_text_value(original_name),
+                       sanitize_text_value(saved_path),
                        as.integer(input$speciality_id)
                      )
       )

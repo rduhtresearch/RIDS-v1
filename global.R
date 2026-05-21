@@ -11,6 +11,7 @@ library(shinyFeedback)
 library(shinyjs)
 library(reactable)
 library(DT)
+library(jsonlite)
 library(zip)
 
 # ==============================================================================
@@ -81,3 +82,7 @@ onStop(function() {
 # ==============================================================================
 APP_VERSION      <- "0.4.0"
 APP_LAST_UPDATED <- "2026-05-06"
+AUTH_SESSION_HOURS <- suppressWarnings(as.numeric(Sys.getenv("RIDS_AUTH_SESSION_HOURS", "10")))
+if (is.na(AUTH_SESSION_HOURS) || AUTH_SESSION_HOURS <= 0) {
+  AUTH_SESSION_HOURS <- 10
+}
