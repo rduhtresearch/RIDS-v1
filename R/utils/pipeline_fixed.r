@@ -281,7 +281,11 @@ run_stage_a <- function(input_file, db_path = NULL) {
     study_value <- parsed$study
     cpms_id <- parsed$cpms_id
     
-    message("Study: ", study_value, " | CPMS: ", cpms_id)
+    app_log_info("pipeline", "Parsed workbook sheet", list(
+      study = study_value,
+      cpms_id = cpms_id,
+      sheet = sheet_name
+    ))
     
     if (is.null(df) || nrow(df) == 0) next
     
@@ -319,7 +323,10 @@ run_stage_a <- function(input_file, db_path = NULL) {
   
   if (!is.null(db_path)) {
     if (nrow(ict_cost_table) > 0) persist_ict_to_duckdb(db_path, ict_cost_table)
-    message("ict_costing_tbl written to: ", db_path)
+    app_log_info("pipeline", "ICT costing table persisted", list(
+      rows = nrow(ict_cost_table),
+      db_path = db_path
+    ))
   }
   
   list(
@@ -466,20 +473,20 @@ process_workbook <- function(input_path, archive_dir = NULL, export_path = NULL,
     if (!dir.exists(archive_dir)) dir.create(archive_dir, recursive = TRUE)
     archive_dest <- file.path(archive_dir, basename(input_path))
     file.copy(input_path, archive_dest, overwrite = TRUE)
-    message("Archived original to: ", archive_dest)
+    app_log_info("pipeline", "Archived original workbook", list(path = archive_dest))
   }
   
-  message("--- Stage A: cleaning/standardising ---")
+  app_log_info("pipeline", "Stage A started")
   stage_a_result <- run_stage_a(input_file = input_path, db_path = db_path)
-  message("ICT rows in memory: ", nrow(stage_a_result$ict_cost_table))
+  app_log_info("pipeline", "Stage A completed", list(rows = nrow(stage_a_result$ict_cost_table)))
   
-  message("--- Stage B: reshaping to long format ---")
+  app_log_info("pipeline", "Stage B started")
   df_long <- run_stage_b(df = stage_a_result$processed_sheets)
   
-  message("--- Post-processing: adding Study_Arm ---")
+  app_log_info("pipeline", "Study arm post-processing started")
   df_long <- add_study_arm(df_long)
   
-  message("--- Post-processing: assigning activity_occurrence_id ---")
+  app_log_info("pipeline", "Activity occurrence assignment started")
   UA_ARMS <- c("UA", "SC", "SSP")
   
   df_long <- imap(df_long, function(df, sheet_nm) {
@@ -501,10 +508,10 @@ process_workbook <- function(input_path, archive_dir = NULL, export_path = NULL,
   
   if (!is.null(export_path)) {
     write.xlsx(df_long, file = export_path, rowNames = FALSE)
-    message("Final export written to: ", export_path)
+    app_log_info("pipeline", "Final export written", list(path = export_path))
   }
   
-  message("--- Pipeline complete ---")
+  app_log_info("pipeline", "Pipeline complete")
   invisible(df_long)
 }
 

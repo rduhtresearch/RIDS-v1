@@ -74,7 +74,7 @@ suppressPackageStartupMessages({
     stop("ca_build_custom_rows(): every row must have a finite numeric amount.")
   }
   
-  required_context <- c("cpms_id", "study_name", "Study_Arm", "Activity",
+  required_context <- c("cpms_id", "study_site", "study_name", "Study_Arm", "Activity",
                         "scenario_id", "edge_key")
   missing_ctx <- setdiff(required_context, names(context))
   if (length(missing_ctx) > 0) {
@@ -122,6 +122,7 @@ ca_build_custom_rows <- function(rows, mode, context) {
     row_id               = as.integer(row_id_base + seq_len(n) - 1L),
     scenario_id          = as.character(context$scenario_id),
     cpms_id              = as.character(context$cpms_id),
+    study_site           = as.character(context$study_site),
     study_name           = as.character(context$study_name),
     Study_Arm            = as.character(context$Study_Arm),
     Activity             = as.character(context$Activity),

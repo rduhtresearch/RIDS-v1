@@ -596,6 +596,13 @@ step4_UI <- function(id) {
 
 step4_Server <- function(id, auth_state, shared_state, current_step) {
   moduleServer(id, function(input, output, session) {
+    study_identity_params <- function() {
+      list(
+        as.character(shared_state$cpms_id),
+        as.character(shared_state$study_site),
+        as.character(shared_state$scenario_id)
+      )
+    }
     
     templates <- reactiveVal(NULL)
     zip_path  <- reactiveVal(NULL)
@@ -603,8 +610,10 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     # ── Reset helper for shared_state ──────────────────────────────────────────
     reset_shared_state <- function() {
       shared_state$scenario_id      <- NULL
+      shared_state$study_site       <- NULL
       shared_state$edge_id          <- NULL
       shared_state$cpms_id          <- NULL
+      shared_state$study_name       <- NULL
       shared_state$filename         <- NULL
       shared_state$upload_meta      <- NULL
       shared_state$raw_ict          <- NULL
@@ -726,6 +735,20 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       }
       invisible(zp)
     }
+
+    log_step4_event <- function(level, message, details = list()) {
+      log_event(
+        level = level,
+        area = "step4",
+        message = message,
+        user_id = auth_state$user_id,
+        username = auth_state$username,
+        cpms_id = shared_state$cpms_id,
+        upload_id = shared_state$upload_id,
+        session_id = auth_state$session_id,
+        details = details
+      )
+    }
     
     # ── Generate templates on load ────────────────────────────────────────────
     observe({
@@ -738,17 +761,35 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       custom_activity_handles$invalidation_signal()
       
       w$show()
+
+      log_step4_event(
+        level = "INFO",
+        message = "Posting line generation started",
+        details = list(scenario_id = shared_state$scenario_id)
+      )
       
       adjusted <- tryCatch({
         adjust_posting_lines(shared_state$evaluated_plan)
       }, error = function(e) {
-        message("adjust_posting_lines error: ", e$message)
+        app_log_exception("step4", "Adjust posting lines failed", e, list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id
+        ))
+        log_step4_event(
+          level = "ERROR",
+          message = "Posting line generation failed",
+          details = list(
+            stage = "adjust_posting_lines",
+            error = conditionMessage(e)
+          )
+        )
         showNotification("Failed to adjust posting lines", type = "error")
         w$hide()
         return(NULL)
       })
       
       req(adjusted)
+      adjusted$study_site <- shared_state$study_site
       
       adjusted <- adjusted %>% rename(Staff_Role = Staff.Role)
       
@@ -756,7 +797,10 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       adjusted <- tryCatch({
         add_cost_centres(adjusted, isolate(shared_state$speciality_name))
       }, error = function(e) {
-        message("add_cost_centres error: ", conditionMessage(e))
+        app_log_exception("step4", "Cost centre assignment failed", e, list(
+          cpms_id = shared_state$cpms_id,
+          speciality = isolate(shared_state$speciality_name)
+        ))
         showNotification(
           paste("Failed to assign cost centres:", conditionMessage(e)),
           type = "error",
@@ -768,7 +812,9 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       adjusted <- tryCatch({
         assign_edge_keys(adjusted)
       }, error = function(e) {
-        message("assign_edge_keys error: ", conditionMessage(e))
+        app_log_exception("step4", "EDGE key assignment failed", e, list(
+          cpms_id = shared_state$cpms_id
+        ))
         showNotification(
           paste("Failed to assign EDGE keys:", conditionMessage(e)),
           type = "error",
@@ -781,7 +827,9 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       adjusted <- tryCatch({
         apply_custom_activities(adjusted, shared_state)
       }, error = function(e) {
-        message("apply_custom_activities error: ", conditionMessage(e))
+        app_log_exception("step4", "Custom activity merge failed", e, list(
+          cpms_id = shared_state$cpms_id
+        ))
         showNotification(
           paste("Failed to merge custom activities:", conditionMessage(e)),
           type = "error",
@@ -793,13 +841,38 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       
       tryCatch({
         dbExecute(CON,
-                  "DELETE FROM posting_lines WHERE cpms_id = ?",
-                  params = list(as.character(shared_state$cpms_id))
+                  paste(
+                    "DELETE FROM posting_lines",
+                    "WHERE cpms_id = ? AND study_site = ? AND scenario_id = ?"
+                  ),
+                  params = study_identity_params()
         )
         dbAppendTable(CON, "posting_lines", adjusted)
-        message("Posting lines saved to DB: ", nrow(adjusted), " rows")
+        log_step4_event(
+          level = "INFO",
+          message = "Posting line generation completed",
+          details = list(rows = nrow(adjusted))
+        )
+        app_log_info("step4", "Posting lines saved", list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          rows = nrow(adjusted)
+        ))
       }, error = function(e) {
-        message("Posting lines DB error: ", e$message)
+        app_log_exception("step4", "Posting lines persistence failed", e, list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          rows = nrow(adjusted)
+        ))
+        log_step4_event(
+          level = "ERROR",
+          message = "Persistence failed",
+          details = list(
+            stage = "posting_lines_persist",
+            rows = nrow(adjusted),
+            error = conditionMessage(e)
+          )
+        )
         showNotification("Failed to save posting lines", type = "error")
       })
       
@@ -814,7 +887,20 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         templates <- build_all_edge_templates(adjusted, visit_lookup, shared_state$upload_meta$edge_id)
         
       }, error = function(e) {
-        message("build_all_edge_templates error: ", e$message)
+        app_log_exception("step4", "EDGE template build failed", e, list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          rows = nrow(adjusted)
+        ))
+        log_step4_event(
+          level = "ERROR",
+          message = "Posting line generation failed",
+          details = list(
+            stage = "template_build",
+            rows = nrow(adjusted),
+            error = conditionMessage(e)
+          )
+        )
         showNotification("Failed to build templates", type = "error")
         w$hide()
         return(NULL)
@@ -828,8 +914,26 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       # The download handler regenerates from edited_templates() on click.
       tryCatch({
         timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-        zip_name  <- paste0(shared_state$cpms_id, "_", timestamp, ".zip")
+        zip_name  <- paste0(
+          shared_state$cpms_id,
+          "_",
+          shared_state$study_site,
+          "_",
+          shared_state$scenario_id,
+          "_",
+          timestamp,
+          ".zip"
+        )
         zp        <- file.path(EDGE_OUTPUT_DIR, zip_name)
+
+        log_step4_event(
+          level = "INFO",
+          message = "ZIP generation started",
+          details = list(
+            template_count = length(tmpl),
+            zip_name = zip_name
+          )
+        )
         
         if (!dir.exists(EDGE_OUTPUT_DIR)) dir.create(EDGE_OUTPUT_DIR, recursive = TRUE)
         
@@ -838,12 +942,37 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         
         # Persist the ZIP path to meta_data for this study
         dbExecute(CON,
-                  "UPDATE meta_data SET edge_zip_path = ? WHERE cpms_id = ?",
-                  params = list(zp, as.character(shared_state$cpms_id))
+                  paste(
+                    "UPDATE meta_data SET edge_zip_path = ?",
+                    "WHERE cpms_id = ? AND study_site = ? AND scenario_id = ?"
+                  ),
+                  params = c(list(zp), study_identity_params())
+        )
+
+        log_step4_event(
+          level = "INFO",
+          message = "ZIP generation completed",
+          details = list(
+            template_count = length(tmpl),
+            zip_name = zip_name
+          )
         )
         
       }, error = function(e) {
-        message("Zip error: ", e$message)
+        app_log_exception("step4", "ZIP generation failed", e, list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          template_count = length(tmpl)
+        ))
+        log_step4_event(
+          level = "ERROR",
+          message = "Persistence failed",
+          details = list(
+            stage = "zip_generation",
+            template_count = length(tmpl),
+            error = conditionMessage(e)
+          )
+        )
         showNotification("Failed to save ZIP", type = "error")
       })
       

@@ -47,11 +47,13 @@ suppressPackageStartupMessages({
 # ── Test fixtures ────────────────────────────────────────────────────────────
 
 .make_single_activity <- function(cpms_id = "59904",
+                                  study_site = "RDUHT",
                                   cost_centre = "RDH-FIN-001",
                                   amount = 1000,
                                   activity_name = "External consultancy") {
   list(
     cpms_id     = cpms_id,
+    study_site  = study_site,
     study_name  = "POLARIS-AD",
     scenario_id = "A",
     Study_Arm   = "Treatment",
@@ -63,9 +65,11 @@ suppressPackageStartupMessages({
 }
 
 .make_baseline_activity <- function(cpms_id = "59904",
+                                    study_site = "RDUHT",
                                     activity_name = "Screening failure recovery") {
   list(
     cpms_id     = cpms_id,
+    study_site  = study_site,
     study_name  = "POLARIS-AD",
     scenario_id = "A",
     Study_Arm   = "Treatment",
@@ -100,7 +104,7 @@ run_ca_query_tests <- function() {
           "addon_custom_activities" %in% dbListTables(CON))
   
   cols <- dbListFields(CON, "addon_custom_activities")
-  expected_cols <- c("id", "custom_activity_id", "cpms_id", "study_name",
+  expected_cols <- c("id", "custom_activity_id", "cpms_id", "study_site", "study_name",
                      "scenario_id", "Study_Arm", "Activity", "mode",
                      "slot_num", "cost_centre", "amount", "created_by",
                      "created_at")
@@ -116,12 +120,12 @@ run_ca_query_tests <- function() {
   # ── ID generation ──────────────────────────────────────────────────────────
   cat("\n[ ca_next_id ]\n")
   .expect("first id is cpms-001",
-          ca_next_id("59904") == "59904-001")
+          ca_next_id("59904", "RDUHT", "A") == "59904-001")
   
   .expect_error("rejects empty cpms_id",
-                ca_next_id(""))
+                ca_next_id("", "RDUHT", "A"))
   .expect_error("rejects NA cpms_id",
-                ca_next_id(NA_character_))
+                ca_next_id(NA_character_, "RDUHT", "A"))
   
   # ── Insert: single_cc ──────────────────────────────────────────────────────
   cat("\n[ ca_insert: single_cc ]\n")
@@ -167,7 +171,7 @@ run_ca_query_tests <- function() {
   .expect("third id is 59904-003 (not -002 again)",
           id3 == "59904-003")
   
-  next_id <- ca_next_id("59904")
+  next_id <- ca_next_id("59904", "RDUHT", "A")
   .expect("next id is 59904-004",  next_id == "59904-004")
   
   # Different cpms_id starts fresh at 001
@@ -176,17 +180,17 @@ run_ca_query_tests <- function() {
   
   # ── ca_load ────────────────────────────────────────────────────────────────
   cat("\n[ ca_load ]\n")
-  loaded <- ca_load("59904")
+  loaded <- ca_load("59904", "RDUHT", "A")
   .expect("loads tibble",                    is_tibble(loaded))
   .expect("loads 7 rows (1+5+1)",            nrow(loaded) == 7L)
   .expect("ordered by custom_activity_id then slot_num",
           identical(loaded$custom_activity_id,
                     sort(loaded$custom_activity_id)))
   
-  loaded_other <- ca_load("12345")
+  loaded_other <- ca_load("12345", "RDUHT", "A")
   .expect("isolates by cpms_id",             nrow(loaded_other) == 1L)
   
-  empty <- ca_load("99999")
+  empty <- ca_load("99999", "RDUHT", "A")
   .expect("returns empty tibble for no-data run", nrow(empty) == 0L)
   .expect("empty result is still a tibble",       is_tibble(empty))
   
@@ -195,7 +199,7 @@ run_ca_query_tests <- function() {
   deleted_n <- ca_delete(id2)   # the baseline (5 rows)
   .expect("ca_delete returns 5 (rows removed)",  deleted_n == 5L)
   
-  loaded_after <- ca_load("59904")
+  loaded_after <- ca_load("59904", "RDUHT", "A")
   .expect("baseline rows are gone",              !(id2 %in% loaded_after$custom_activity_id))
   .expect("other activities still present",      id1 %in% loaded_after$custom_activity_id)
   
@@ -207,20 +211,20 @@ run_ca_query_tests <- function() {
   # We've deleted -002 but -003 still exists. Max suffix is 3, so next is 4.
   # This is intentional: ids are not reused. If you delete -002, the next id
   # is still -004, not -002.
-  next_after_delete <- ca_next_id("59904")
+  next_after_delete <- ca_next_id("59904", "RDUHT", "A")
   .expect("next_id continues past deleted (not reused)",
           next_after_delete == "59904-004")
   
   # ── ca_clear_run ───────────────────────────────────────────────────────────
   cat("\n[ ca_clear_run ]\n")
-  before <- nrow(ca_load("59904"))
-  cleared_n <- ca_clear_run("59904")
+  before <- nrow(ca_load("59904", "RDUHT", "A"))
+  cleared_n <- ca_clear_run("59904", "RDUHT", "A")
   .expect("clears all rows for the run",        cleared_n == before)
-  .expect("nothing left for that run",          nrow(ca_load("59904")) == 0L)
-  .expect("other run unaffected",               nrow(ca_load("12345")) == 1L)
+  .expect("nothing left for that run",          nrow(ca_load("59904", "RDUHT", "A")) == 0L)
+  .expect("other run unaffected",               nrow(ca_load("12345", "RDUHT", "A")) == 1L)
   
   # After full clear, ids start fresh
-  fresh_id <- ca_next_id("59904")
+  fresh_id <- ca_next_id("59904", "RDUHT", "A")
   .expect("after clear, next_id resets to 001", fresh_id == "59904-001")
   
   # ── Insert validation ──────────────────────────────────────────────────────
@@ -262,12 +266,12 @@ run_ca_query_tests <- function() {
   # Try inserting an activity with a NA amount — this passes the function
   # validation (NA is technically numeric) but should be caught somewhere if
   # we add stricter checks later. For now, just confirm it doesn't half-write.
-  before_n <- nrow(ca_load("12345"))
+  before_n <- nrow(ca_load("12345", "RDUHT", "A"))
   ok <- tryCatch({
     ca_insert(.make_baseline_activity(cpms_id = "12345"))
     TRUE
   }, error = function(e) FALSE)
-  after_n <- nrow(ca_load("12345"))
+  after_n <- nrow(ca_load("12345", "RDUHT", "A"))
   .expect("baseline insert wrote all 5 rows or none",
           (ok && after_n == before_n + 5L) || (!ok && after_n == before_n))
   

@@ -4,6 +4,7 @@
 .RData
 .Ruserdata
 config.R
+deployment/
 
 # OS
 .DS_Store
@@ -16,6 +17,7 @@ config.R
 *.csv
 *.xlsx
 *.rds
+logs/
 
 # Secrets
 .env

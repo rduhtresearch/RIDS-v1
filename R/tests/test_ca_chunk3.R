@@ -60,6 +60,7 @@ suppressPackageStartupMessages({
     row_category         = "BASELINE",
     is_medic             = FALSE,
     cpms_id              = "59904",
+    study_site           = "RDUHT",
     study_name           = "POLARIS-AD",
     Study_Arm            = "Pharmacy",
     Activity             = "Pharmacy.Dispensing",
@@ -98,6 +99,7 @@ suppressPackageStartupMessages({
                                   activity_name = "External consultancy") {
   list(
     cpms_id     = cpms_id,
+    study_site  = "RDUHT",
     study_name  = "POLARIS-AD",
     scenario_id = "A",
     Study_Arm   = "Treatment",
@@ -112,6 +114,7 @@ suppressPackageStartupMessages({
                                     activity_name = "Screening failure") {
   list(
     cpms_id     = cpms_id,
+    study_site  = "RDUHT",
     study_name  = "POLARIS-AD",
     scenario_id = "A",
     Study_Arm   = "Treatment",
@@ -128,6 +131,7 @@ suppressPackageStartupMessages({
 .make_shared_state <- function(cpms_id = "59904") {
   list(
     cpms_id     = cpms_id,
+    study_site  = "RDUHT",
     study_name  = "POLARIS-AD",
     scenario_id = "A"
   )
@@ -283,7 +287,7 @@ run_ca_chunk3_tests <- function() {
                 apply_custom_activities(pipeline, list(cpms_id = "")))
   
   cat("\n[ apply_custom_activities: round-trip after clear_run ]\n")
-  ca_clear_run("59904")
+  ca_clear_run("59904", "RDUHT", "A")
   out_after_clear <- apply_custom_activities(pipeline, shared)
   .expect("post-clear returns 3 rows (just pipeline)",  nrow(out_after_clear) == 3L)
   .expect("post-clear identical to original pipeline",   identical(out_after_clear, pipeline))

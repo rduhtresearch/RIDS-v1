@@ -54,7 +54,14 @@ apply_custom_activities <- function(pipeline_rows, shared_state, con = CON) {
   }
   
   # ── 1. Load custom activities for this run ────────────────────────────────
-  customs <- ca_load(as.character(cpms_id), con = con)
+  study_site <- shared_state$study_site %||% NA_character_
+  scenario_id <- shared_state$scenario_id %||% NA_character_
+  customs <- ca_load(
+    cpms_id = as.character(cpms_id),
+    study_site = as.character(study_site),
+    scenario_id = as.character(scenario_id),
+    con = con
+  )
   
   # ── 2. No-op short-circuit ────────────────────────────────────────────────
   # Pipeline output unchanged when nothing's been added — gives the addon
@@ -95,6 +102,7 @@ apply_custom_activities <- function(pipeline_rows, shared_state, con = CON) {
       
       context <- list(
         cpms_id     = unique(g$cpms_id),
+        study_site  = unique(g$study_site)  %||% shared_state$study_site %||% NA_character_,
         study_name  = unique(g$study_name)  %||% shared_state$study_name  %||% NA_character_,
         scenario_id = unique(g$scenario_id) %||% shared_state$scenario_id %||% NA_character_,
         Study_Arm   = unique(g$Study_Arm),

@@ -21,8 +21,11 @@ appServer <- function(id, auth_state, current_step) {
   moduleServer(id, function(input, output, session) {
     shared_state <- reactiveValues(
       scenario_id     = NULL,
+      study_site      = NULL,
       edge_id         = NULL,
       cpms_id         = NULL,
+      study_name      = NULL,
+      upload_id       = NULL,
       filename        = NULL,
       upload_meta     = NULL,
       raw_ict         = NULL,
@@ -31,13 +34,16 @@ appServer <- function(id, auth_state, current_step) {
       edge_templates  = NULL,
       current_step    = NULL,
       timestamp       = NULL,
-      current_study_id = NULL
+      current_study   = NULL
     )
 
     session$userData$reset_app_state <- function() {
       shared_state$scenario_id <- NULL
+      shared_state$study_site <- NULL
       shared_state$edge_id <- NULL
       shared_state$cpms_id <- NULL
+      shared_state$study_name <- NULL
+      shared_state$upload_id <- NULL
       shared_state$filename <- NULL
       shared_state$upload_meta <- NULL
       shared_state$raw_ict <- NULL
@@ -46,7 +52,7 @@ appServer <- function(id, auth_state, current_step) {
       shared_state$edge_templates <- NULL
       shared_state$current_step <- NULL
       shared_state$timestamp <- NULL
-      shared_state$current_study_id <- NULL
+      shared_state$current_study <- NULL
       current_step(NULL)
     }
     

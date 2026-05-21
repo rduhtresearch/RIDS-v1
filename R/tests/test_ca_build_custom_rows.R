@@ -45,6 +45,7 @@ suppressPackageStartupMessages({
 
 ctx <- list(
   cpms_id     = "59904",
+  study_site  = "RDUHT",
   study_name  = "POLARIS-AD",
   Study_Arm   = "Treatment",
   Activity    = "External consultancy fee",
@@ -85,6 +86,7 @@ run_ca_tests <- function() {
   .expect("Visit placeholder set",              out$Visit[1] == "VISIT - 001")
   .expect("edge_key carried through",           out$edge_key[1] == "CA-0001")
   .expect("cpms_id carried through",            out$cpms_id[1] == "59904")
+  .expect("study_site carried through",         out$study_site[1] == "RDUHT")
   .expect("Study_Arm carried through",          out$Study_Arm[1] == "Treatment")
   .expect("Activity carried through",           out$Activity[1] == "External consultancy fee")
   .expect("staff_group = 1L",                   out$staff_group[1] == 1L)
@@ -117,7 +119,7 @@ run_ca_tests <- function() {
   cat("\n[ schema check ]\n")
   expected_cols <- c(
     "row_id", "scenario_id", "row_category_auto", "calc_tag", "row_category",
-    "is_medic", "cpms_id", "study_name", "Study_Arm", "Activity", "Visit",
+    "is_medic", "cpms_id", "study_site", "study_name", "Study_Arm", "Activity", "Visit",
     "posting_line_type_id", "posting_amount", "destination_bucket",
     "destination_entity", "cost_code", "sheet_name", "Visit_Label",
     "staff_group", "contract_cost", "Department", "Staff_Role",

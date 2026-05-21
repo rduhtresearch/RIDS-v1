@@ -1,5 +1,8 @@
 suppressPackageStartupMessages(library(dplyr))
 
+# Uses `contract_cost` exactly as saved in Step 2. If users bulk-fill with
+# rounding on, the saved values are whole pounds; if they turn rounding off,
+# the saved values retain pence and are adjusted as-is downstream.
 adjust_posting_lines <- function(out) {
   
   .ADJUSTMENT_SPECIAL <- c("Unscheduled Activities", "Setup & Closedown")

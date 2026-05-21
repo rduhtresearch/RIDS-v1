@@ -247,7 +247,7 @@ loginServer <- function(id) {
       login_result <- tryCatch({
         authenticate_user(input$username, input$password)
       }, error = function(e) {
-        message("Login error: ", e$message)
+        app_log_exception("auth", "Login request failed", e, list(username = trimws(input$username)))
         NULL
       })
 
@@ -293,7 +293,7 @@ loginServer <- function(id) {
           password = input$bootstrap_password
         )
       }, error = function(e) {
-        message("Bootstrap admin error: ", e$message)
+        app_log_exception("auth", "Bootstrap admin creation failed", e, list(username = trimws(input$bootstrap_username)))
         NULL
       })
 
@@ -358,7 +358,7 @@ loginServer <- function(id) {
       restore_result <- tryCatch({
         restore_auth_session(token)
       }, error = function(e) {
-        message("Session restore error: ", e$message)
+        app_log_exception("auth", "Session restore failed", e)
         list(success = FALSE, status = "invalid")
       })
 
@@ -390,7 +390,7 @@ loginServer <- function(id) {
       restore_result <- tryCatch({
         restore_auth_session(token)
       }, error = function(e) {
-        message("Client token restore error: ", e$message)
+        app_log_exception("auth", "Client token restore failed", e)
         list(success = FALSE, status = "invalid")
       })
 

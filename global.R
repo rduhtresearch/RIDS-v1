@@ -17,7 +17,9 @@ library(zip)
 # ==============================================================================
 # SOURCE UTILS
 # ==============================================================================
+source("R/utils/deployment_config.R")
 source("R/utils/auth.r")
+source("R/utils/logging.R")
 source("R/utils/add_study_arm.r")
 source("R/utils/pipeline_fixed.r")
 source("R/utils/posting_test.r")
@@ -42,17 +44,23 @@ source("R/addons/custom_activities/apply_custom_activities.R", local = FALSE)
 # ==============================================================================
 # GLOBAL CONFIGURATION & INITIALIZATION
 # ==============================================================================
-message("=== GLOBAL LOAD ===\n")
+# Load deployment config written by SETUP/new_setup.R
+APP_CONFIG <- load_runtime_config(getwd())
+CONFIG_SOURCE_PATH <- APP_CONFIG$source_path
+STORAGE_MODE <- APP_CONFIG$storage_mode
+DB_DIR <- APP_CONFIG$db_dir
+ICT_UPLOAD_DIR <- APP_CONFIG$ict_upload_dir
+EDGE_OUTPUT_DIR <- APP_CONFIG$edge_output_dir
+APP_HOST <- APP_CONFIG$app_host
+APP_PORT <- APP_CONFIG$app_port
+APP_RUN_LOG_DIR <- file.path(getwd(), "logs")
+APP_RUN_LOG_FILE <- initialize_app_run_logging(APP_RUN_LOG_DIR)
 
-# Load paths written by SETUP/new_setup.R
-if (!file.exists("config.R")) {
-  stop("config.R not found. Run R/SETUP/new_setup.R before launching the app.")
-}
-source("config.R")
+app_log_info("startup", "Global initialization started")
 
 # Connect to database
-CON <- dbConnect(duckdb(), DB_DIR)
-message("=== DB CONNECTED ===\n")
+CON <- connect_primary_database(APP_CONFIG)
+app_log_info("startup", "Primary database connected", list(storage_mode = STORAGE_MODE))
 
 # Load paths from DB settings (admin may have updated them); fall back to config values
 ICT_UPLOAD_DIR_DEFAULT <- ICT_UPLOAD_DIR
@@ -73,8 +81,9 @@ db_main()
 # SHINY SESSION CLEANUP
 # ==============================================================================
 onStop(function() {
-  message("=== CLOSING DB ===\n")
+  app_log_info("shutdown", "Closing primary database")
   dbDisconnect(CON, shutdown = TRUE)
+  close_app_run_logging()
 })
 
 # ==============================================================================

@@ -29,6 +29,11 @@ studyWorkspaceUI <- function(id) {
 studyWorkspaceServer <- function(id, shared_state) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
+    active_study <- reactive({
+      req(shared_state$current_study)
+      shared_state$current_study
+    })
     
     # ── Helper: render a value, falling back to em-dash if NA/empty ──────────
     fmt_value <- function(x) {
@@ -40,11 +45,12 @@ studyWorkspaceServer <- function(id, shared_state) {
     
     # ── Look up the active study's metadata ──────────────────────────────────
     study_meta <- reactive({
-      req(shared_state$current_study_id)
+      ref <- active_study()
       
       df <- DBI::dbGetQuery(CON,
                             "SELECT
                 REPLACE(m.cpms_id, chr(0), '') AS cpms_id,
+                REPLACE(m.study_site, chr(0), '') AS study_site,
                 REPLACE(m.study_name, chr(0), '') AS study_name,
                 REPLACE(m.scenario_id, chr(0), '') AS scenario_id,
                 REPLACE(m.edge_id, chr(0), '') AS edge_id,
@@ -57,8 +63,12 @@ studyWorkspaceServer <- function(id, shared_state) {
                 m.speciality_id, s.name AS speciality_name
          FROM meta_data m
          LEFT JOIN specialities s ON m.speciality_id = s.id
-         WHERE m.cpms_id = ?",
-                            params = list(as.character(shared_state$current_study_id))
+         WHERE m.cpms_id = ? AND m.study_site = ? AND m.scenario_id = ?",
+                            params = list(
+                              as.character(ref$cpms_id),
+                              as.character(ref$study_site),
+                              as.character(ref$scenario_id)
+                            )
       )
       
       if (nrow(df) == 0) return(NULL)
@@ -67,11 +77,18 @@ studyWorkspaceServer <- function(id, shared_state) {
     
     # ── Posting lines row count for active study ─────────────────────────────
     posting_count <- reactive({
-      req(shared_state$current_study_id)
+      ref <- active_study()
       
       df <- DBI::dbGetQuery(CON,
-                            "SELECT COUNT(*) AS n FROM posting_lines WHERE cpms_id = ?",
-                            params = list(as.character(shared_state$current_study_id))
+                            paste(
+                              "SELECT COUNT(*) AS n FROM posting_lines",
+                              "WHERE cpms_id = ? AND study_site = ? AND scenario_id = ?"
+                            ),
+                            params = list(
+                              as.character(ref$cpms_id),
+                              as.character(ref$study_site),
+                              as.character(ref$scenario_id)
+                            )
       )
       
       df$n[1]
@@ -79,23 +96,24 @@ studyWorkspaceServer <- function(id, shared_state) {
     
     # ── Header title ─────────────────────────────────────────────────────────
     output$workspace_title <- renderText({
-      if (is.null(shared_state$current_study_id)) return("No study selected")
+      if (is.null(shared_state$current_study)) return("No study selected")
       
       meta <- study_meta()
       if (is.null(meta)) {
-        return(paste0("CPMS ", shared_state$current_study_id))
+        ref <- active_study()
+        return(paste0("CPMS ", ref$cpms_id, " · ", ref$study_site, " · Scenario ", ref$scenario_id))
       }
       
       if (is.na(meta$study_name) || !nzchar(meta$study_name)) {
-        paste0("CPMS ", meta$cpms_id)
+        paste0("CPMS ", meta$cpms_id, " · ", meta$study_site, " · Scenario ", meta$scenario_id)
       } else {
-        paste0(meta$study_name, " · CPMS ", meta$cpms_id)
+        paste0(meta$study_name, " · CPMS ", meta$cpms_id, " · ", meta$study_site)
       }
     })
     
     # ── Body: tabs ───────────────────────────────────────────────────────────
     output$body <- renderUI({
-      if (is.null(shared_state$current_study_id)) {
+      if (is.null(shared_state$current_study)) {
         return(p(
           style = "color: #697786; padding: 1rem;",
           "No study selected. Open one from the library."
@@ -104,9 +122,17 @@ studyWorkspaceServer <- function(id, shared_state) {
       
       meta <- study_meta()
       if (is.null(meta)) {
+        ref <- active_study()
         return(p(
           style = "color: #c0392b; padding: 1rem;",
-          paste0("Study not found: CPMS ", shared_state$current_study_id)
+          paste0(
+            "Study not found: CPMS ",
+            ref$cpms_id,
+            " / ",
+            ref$study_site,
+            " / Scenario ",
+            ref$scenario_id
+          )
         ))
       }
       
@@ -138,6 +164,7 @@ studyWorkspaceServer <- function(id, shared_state) {
       overview_panel <- div(
         style = "padding: 1rem;",
         kv("CPMS ID",        fmt_value(meta$cpms_id)),
+        kv("Study Site",     fmt_value(meta$study_site)),
         kv("EDGE ID",        fmt_value(meta$edge_id)),
         kv("Scenario",       fmt_value(meta$scenario_id)),
         kv("Speciality",     fmt_value(meta$speciality_name)),
@@ -297,25 +324,37 @@ studyWorkspaceServer <- function(id, shared_state) {
     # ── Posting lines download ───────────────────────────────────────────────
     output$download_posting_lines <- downloadHandler(
       filename = function() {
-        req(shared_state$current_study_id)
+        req(shared_state$current_study)
         meta <- study_meta()
         req(meta)
         
         cpms <- meta$cpms_id
+        site <- if (!is.na(meta$study_site) && nzchar(meta$study_site)) {
+          meta$study_site
+        } else {
+          "site"
+        }
         name <- if (!is.na(meta$study_name) && nzchar(meta$study_name)) {
           gsub("[^A-Za-z0-9_-]+", "_", meta$study_name)
         } else {
           "study"
         }
         ts <- format(Sys.time(), "%Y%m%d_%H%M%S")
-        paste0(cpms, "_", name, "_posting_lines_", ts, ".csv")
+        paste0(cpms, "_", site, "_", name, "_posting_lines_", ts, ".csv")
       },
       content = function(file) {
-        req(shared_state$current_study_id)
+        ref <- active_study()
         
         df <- DBI::dbGetQuery(CON,
-                              "SELECT * FROM posting_lines WHERE cpms_id = ?",
-                              params = list(as.character(shared_state$current_study_id))
+                              paste(
+                                "SELECT * FROM posting_lines",
+                                "WHERE cpms_id = ? AND study_site = ? AND scenario_id = ?"
+                              ),
+                              params = list(
+                                as.character(ref$cpms_id),
+                                as.character(ref$study_site),
+                                as.character(ref$scenario_id)
+                              )
         )
         
         if (nrow(df) == 0) {
@@ -349,7 +388,7 @@ studyWorkspaceServer <- function(id, shared_state) {
       filename = function() {
         meta <- study_meta()
         req(meta)
-        paste0(meta$cpms_id, "_edge_templates.zip")
+        paste0(meta$cpms_id, "_", meta$study_site, "_", meta$scenario_id, "_edge_templates.zip")
       },
       content = function(file) {
         meta <- study_meta()
@@ -363,7 +402,7 @@ studyWorkspaceServer <- function(id, shared_state) {
       filename = function() {
         meta <- study_meta()
         req(meta)
-        paste0(meta$cpms_id, "_edge_templates.zip")
+        paste0(meta$cpms_id, "_", meta$study_site, "_", meta$scenario_id, "_edge_templates.zip")
       },
       content = function(file) {
         meta <- study_meta()
@@ -398,7 +437,7 @@ studyWorkspaceServer <- function(id, shared_state) {
     
     # ── Back button ──────────────────────────────────────────────────────────
     observeEvent(input$back_to_library, {
-      shared_state$current_study_id <- NULL
+      shared_state$current_study <- NULL
       shinyjs::runjs('$("a[data-value=\'tab_library\']").trigger("click")')
     })
     

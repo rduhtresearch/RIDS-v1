@@ -2,7 +2,7 @@ hash_password <- function(pw) {
   tryCatch({
     sodium::password_store(pw)
   }, error = function(e) {
-    message("hash_password error: ", e$message)
+    app_log_exception("auth", "Password hashing failed", e)
     NULL
   })
 }
@@ -11,7 +11,7 @@ verify_password <- function(pw, pw_hash) {
   tryCatch({
     isTRUE(sodium::password_verify(pw_hash, pw))
   }, error = function(e) {
-    message("verify_password error: ", e$message)
+    app_log_exception("auth", "Password verification failed", e)
     FALSE
   })
 }
@@ -106,7 +106,7 @@ users_exist <- function() {
   tryCatch({
     dbGetQuery(CON, "SELECT COUNT(*) AS n FROM users")$n[[1]] > 0
   }, error = function(e) {
-    message("users_exist error: ", e$message)
+    app_log_exception("auth", "User existence check failed", e)
     FALSE
   })
 }
@@ -142,8 +142,32 @@ log_auth_event <- function(event_type,
         session_id
       )
     )
+
+    if (exists("log_event", mode = "function")) {
+      level <- if (isTRUE(success)) {
+        "INFO"
+      } else if (event_type %in% c("session_expired", "session_revoked")) {
+        "WARN"
+      } else {
+        "WARN"
+      }
+
+      log_event(
+        level = level,
+        area = "auth",
+        message = message %||% gsub("_", " ", event_type),
+        user_id = user_id,
+        username = username,
+        session_id = session_id,
+        details = list(
+          auth_event_type = event_type,
+          actor_user_id = actor_user_id,
+          success = isTRUE(success)
+        )
+      )
+    }
   }, error = function(e) {
-    message("log_auth_event error: ", e$message)
+    app_log_exception("auth", "Auth audit log write failed", e)
   })
 }
 
@@ -165,7 +189,7 @@ get_user_by_username <- function(username) {
 
     row
   }, error = function(e) {
-    message("get_user_by_username error: ", e$message)
+    app_log_exception("auth", "Lookup by username failed", e, list(username = username))
     NULL
   })
 }
@@ -188,7 +212,7 @@ get_user_by_id <- function(user_id) {
 
     row
   }, error = function(e) {
-    message("get_user_by_id error: ", e$message)
+    app_log_exception("auth", "Lookup by user id failed", e, list(user_id = user_id))
     NULL
   })
 }
@@ -201,7 +225,7 @@ touch_last_login <- function(user_id) {
       params = list(user_id)
     )
   }, error = function(e) {
-    message("touch_last_login error: ", e$message)
+    app_log_exception("auth", "Last login update failed", e, list(user_id = user_id))
   })
 }
 

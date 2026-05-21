@@ -49,6 +49,7 @@ meta_table <- function() {
     "CREATE TABLE IF NOT EXISTS meta_data (
       id                INTEGER PRIMARY KEY DEFAULT nextval('upload_id_seq'),
       cpms_id           VARCHAR,
+      study_site        VARCHAR,
       scenario_id       VARCHAR,
       edge_id           VARCHAR,
       study_name        VARCHAR,
@@ -73,17 +74,28 @@ meta_table <- function() {
     dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN speciality_id INTEGER;")
     message("meta_data.speciality_id column added")
   }
+
+  if (!"study_site" %in% meta_cols) {
+    dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN study_site VARCHAR;")
+    message("meta_data.study_site column added")
+  }
   
   if (!"edge_zip_path" %in% meta_cols) {
     dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN edge_zip_path VARCHAR;")
     message("meta_data.edge_zip_path column added")
   }
 
+  dbExecute(CON, "
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_meta_data_unique_study_identity
+      ON meta_data (cpms_id, study_site, scenario_id);
+  ")
+
   tryCatch({
     dbExecute(CON, "
       UPDATE meta_data
       SET
         cpms_id = REPLACE(cpms_id, chr(0), ''),
+        study_site = REPLACE(study_site, chr(0), ''),
         scenario_id = REPLACE(scenario_id, chr(0), ''),
         edge_id = REPLACE(edge_id, chr(0), ''),
         study_name = REPLACE(study_name, chr(0), ''),
@@ -94,6 +106,7 @@ meta_table <- function() {
         edge_zip_path = REPLACE(edge_zip_path, chr(0), '')
       WHERE
         strpos(cpms_id, chr(0)) > 0 OR
+        strpos(study_site, chr(0)) > 0 OR
         strpos(scenario_id, chr(0)) > 0 OR
         strpos(edge_id, chr(0)) > 0 OR
         strpos(study_name, chr(0)) > 0 OR
@@ -499,8 +512,94 @@ settings_table <- function() {
               params = list("edge_output_dir", EDGE_OUTPUT_DIR)
     )
   }
+
+  existing_keys <- tryCatch(
+    dbGetQuery(CON, "SELECT key FROM app_settings")$key,
+    error = function(e) character()
+  )
+
+  if (!"log_retention_days" %in% existing_keys) {
+    dbExecute(
+      CON,
+      "INSERT INTO app_settings (key, value) VALUES (?, ?)",
+      params = list("log_retention_days", "90")
+    )
+  }
   
   message("Settings table initialised")
+}
+
+app_logs_table <- function() {
+  storage_mode <- "duckdb"
+
+  if (exists("APP_CONFIG", inherits = TRUE) &&
+      !is.null(APP_CONFIG$storage_mode) &&
+      nzchar(APP_CONFIG$storage_mode)) {
+    storage_mode <- tolower(APP_CONFIG$storage_mode)
+  }
+
+  if (identical(storage_mode, "sqlserver")) {
+    dbExecute(CON, "
+      IF OBJECT_ID('dbo.app_logs', 'U') IS NULL
+      BEGIN
+        CREATE TABLE dbo.app_logs (
+          log_id BIGINT IDENTITY(1,1) PRIMARY KEY,
+          timestamp DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+          level NVARCHAR(16) NOT NULL,
+          area NVARCHAR(100) NOT NULL,
+          message NVARCHAR(4000) NOT NULL,
+          user_id INT NULL,
+          username NVARCHAR(255) NULL,
+          session_id NVARCHAR(255) NULL,
+          cpms_id NVARCHAR(255) NULL,
+          upload_id NVARCHAR(255) NULL,
+          details_json NVARCHAR(MAX) NULL,
+          app_version NVARCHAR(64) NULL
+        );
+      END
+    ")
+
+    dbExecute(CON, "
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_app_logs_timestamp' AND object_id = OBJECT_ID('dbo.app_logs'))
+      CREATE INDEX ix_app_logs_timestamp ON dbo.app_logs (timestamp DESC);
+    ")
+    dbExecute(CON, "
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_app_logs_level_timestamp' AND object_id = OBJECT_ID('dbo.app_logs'))
+      CREATE INDEX ix_app_logs_level_timestamp ON dbo.app_logs (level, timestamp DESC);
+    ")
+    dbExecute(CON, "
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_app_logs_area_timestamp' AND object_id = OBJECT_ID('dbo.app_logs'))
+      CREATE INDEX ix_app_logs_area_timestamp ON dbo.app_logs (area, timestamp DESC);
+    ")
+    dbExecute(CON, "
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_app_logs_cpms_upload' AND object_id = OBJECT_ID('dbo.app_logs'))
+      CREATE INDEX ix_app_logs_cpms_upload ON dbo.app_logs (cpms_id, upload_id);
+    ")
+  } else {
+    dbExecute(CON, "CREATE SEQUENCE IF NOT EXISTS app_log_id_seq;")
+    dbExecute(CON, "
+      CREATE TABLE IF NOT EXISTS app_logs (
+        log_id       INTEGER PRIMARY KEY DEFAULT nextval('app_log_id_seq'),
+        timestamp    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        level        TEXT NOT NULL,
+        area         TEXT NOT NULL,
+        message      TEXT NOT NULL,
+        user_id      INTEGER,
+        username     TEXT,
+        session_id   TEXT,
+        cpms_id      TEXT,
+        upload_id    TEXT,
+        details_json TEXT,
+        app_version  TEXT
+      );
+    ")
+    dbExecute(CON, "CREATE INDEX IF NOT EXISTS idx_app_logs_timestamp ON app_logs (timestamp);")
+    dbExecute(CON, "CREATE INDEX IF NOT EXISTS idx_app_logs_level_timestamp ON app_logs (level, timestamp);")
+    dbExecute(CON, "CREATE INDEX IF NOT EXISTS idx_app_logs_area_timestamp ON app_logs (area, timestamp);")
+    dbExecute(CON, "CREATE INDEX IF NOT EXISTS idx_app_logs_cpms_upload ON app_logs (cpms_id, upload_id);")
+  }
+
+  message("Application logs table initialised")
 }
 
 # Specialities lookup ----------------------------------------------------------
@@ -549,6 +648,7 @@ posting_lines_table <- function() {
       row_category         VARCHAR,
       is_medic             BOOLEAN,
       cpms_id              VARCHAR,
+      study_site           VARCHAR,
       study_name           VARCHAR,
       Study_Arm            VARCHAR,
       Activity             VARCHAR,
@@ -575,6 +675,12 @@ posting_lines_table <- function() {
       edge_key             VARCHAR
     );
   ")
+
+  posting_cols <- dbListFields(CON, "posting_lines")
+  if (!"study_site" %in% posting_cols) {
+    dbExecute(CON, "ALTER TABLE posting_lines ADD COLUMN study_site VARCHAR;")
+    message("posting_lines.study_site column added")
+  }
 }
 
 ## Main Entry Point ------------------------------------------------------------
@@ -585,6 +691,7 @@ db_main <- function() {
   user_tables()
   build_rules_tables()
   settings_table()
+  app_logs_table()
   specialities_table()
   posting_lines_table()
   ca_init_table()

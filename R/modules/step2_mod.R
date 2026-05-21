@@ -7,7 +7,64 @@ step2_UI <- function(id) {
       status     = "primary",
       solidHeader = FALSE,
       footer = tagList(
-        actionButton(ns("round_all"), "Round all to nearest £"),
+        div(
+          class = "step2-rounding-wrap",
+          span(class = "step2-rounding-title", "Contract cost mode"),
+          div(
+            class = "step2-rounding-toggle",
+            span(
+              id = ns("round_left_label"),
+              class = "step2-rounding-label is-active",
+              "Rounded"
+            ),
+            tags$label(
+              class = "step2-switch",
+              tags$input(
+                id = ns("round_to_pound_switch"),
+                type = "checkbox",
+                checked = "checked",
+                onclick = sprintf(
+                  "Shiny.setInputValue('%s', !this.checked, {priority: 'event'})",
+                  ns("use_unrounded_cost")
+                )
+              ),
+              tags$span(
+                class = "step2-switch-track",
+                tags$span(class = "step2-switch-knob")
+              )
+            ),
+            span(
+              id = ns("round_right_label"),
+              class = "step2-rounding-label",
+              "Unrounded"
+            )
+          ),
+          tags$script(HTML(sprintf("
+            (function() {
+              var cb = document.getElementById('%s');
+              var leftLbl = document.getElementById('%s');
+              var rightLbl = document.getElementById('%s');
+              function refresh() {
+                var knob = cb.parentNode.querySelector('.step2-switch-knob');
+                if (cb.checked) {
+                  knob.style.transform = 'translateX(0)';
+                  leftLbl.classList.add('is-active');
+                  rightLbl.classList.remove('is-active');
+                } else {
+                  knob.style.transform = 'translateX(24px)';
+                  leftLbl.classList.remove('is-active');
+                  rightLbl.classList.add('is-active');
+                }
+              }
+              cb.addEventListener('change', refresh);
+              refresh();
+            })();
+          ",
+            ns("round_to_pound_switch"),
+            ns("round_left_label"),
+            ns("round_right_label")
+          )))
+        ),
         actionButton(ns("save"), "Save to database", class = "btn-success"),
         actionButton(ns("next_step"), "Next: Apply Tags", class = "pipeline-next-btn")
       ),
@@ -37,10 +94,19 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
       working_data$df <- df
     })
     
-    # ── Round all ─────────────────────────────────────────────────────────────
-    observeEvent(input$round_all, {
+    apply_contract_cost_mode <- function(use_unrounded_cost) {
       req(working_data$df)
-      working_data$df$Contract_Cost <- round(working_data$df$ICT_Cost)
+      working_data$df$Contract_Cost <- if (isTRUE(use_unrounded_cost)) {
+        working_data$df$ICT_Cost
+      } else {
+        round(working_data$df$ICT_Cost)
+      }
+      updateReactable("table", data = working_data$df)
+    }
+
+    # ── Toggle rounding mode ──────────────────────────────────────────────────
+    observeEvent(input$use_unrounded_cost, {
+      apply_contract_cost_mode(input$use_unrounded_cost)
     })
     
     # ── Row select → modal ────────────────────────────────────────────────────
@@ -83,6 +149,23 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
     # ── Save to DB ────────────────────────────────────────────────────────────
     observeEvent(input$save, {
       req(working_data$df)
+
+      log_event(
+        level = "INFO",
+        area = "step2",
+        message = "Step 2 save started",
+        user_id = auth_state$user_id,
+        username = auth_state$username,
+        cpms_id = shared_state$cpms_id,
+        upload_id = shared_state$upload_id,
+        session_id = auth_state$session_id,
+        details = list(rows = nrow(working_data$df))
+      )
+      app_log_info("step2", "Step 2 save started", list(
+        cpms_id = shared_state$cpms_id,
+        upload_id = shared_state$upload_id,
+        rows = nrow(working_data$df)
+      ))
       
       tryCatch({
         dbExecute(CON,
@@ -90,9 +173,45 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
                   params = list(as.character(shared_state$cpms_id))
         )
         dbAppendTable(CON, "ict_costing_tbl", working_data$df)
+
+        log_event(
+          level = "INFO",
+          area = "step2",
+          message = "Step 2 save completed",
+          user_id = auth_state$user_id,
+          username = auth_state$username,
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          session_id = auth_state$session_id,
+          details = list(rows = nrow(working_data$df))
+        )
+        app_log_info("step2", "Step 2 save completed", list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          rows = nrow(working_data$df)
+        ))
+
         showNotification("Saved successfully", type = "message", duration = 5)
       }, error = function(e) {
-        message("Save error: ", e$message)
+        app_log_exception("step2", "Step 2 save failed", e, list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          rows = nrow(working_data$df)
+        ))
+        log_event(
+          level = "ERROR",
+          area = "step2",
+          message = "Step 2 save failed",
+          user_id = auth_state$user_id,
+          username = auth_state$username,
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          session_id = auth_state$session_id,
+          details = list(
+            rows = nrow(working_data$df),
+            error = conditionMessage(e)
+          )
+        )
         showNotification("Save failed", type = "error", duration = 5)
       })
     })
@@ -104,7 +223,22 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
         working_data$df,
         selection = "single",
         onClick   = "select",
-        rownames  = FALSE
+        rownames  = FALSE,
+        columns = list(
+          Contract_Cost = colDef(
+            name = "Contract Cost",
+            headerStyle = list(
+              background = "#eef5fa",
+              borderLeft = "1px solid #d6e4ef",
+              borderRight = "1px solid #d6e4ef"
+            ),
+            style = list(
+              background = "#f8fbfd",
+              borderLeft = "1px solid #e2edf5",
+              borderRight = "1px solid #e2edf5"
+            )
+          )
+        )
       )
     })
     

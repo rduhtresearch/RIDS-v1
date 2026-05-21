@@ -139,6 +139,14 @@ libraryUI <- function(id) {
 libraryServer <- function(id, auth_state, shared_state) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
+    build_study_ref <- function(row) {
+      list(
+        cpms_id = as.character(row$cpms_id),
+        study_site = as.character(row$study_site),
+        scenario_id = as.character(row$scenario_id)
+      )
+    }
     
     # ── Track selected study ──────────────────────────────────────────────────
     selected_study <- reactiveVal(NULL)
@@ -148,6 +156,7 @@ libraryServer <- function(id, auth_state, shared_state) {
       studies <- DBI::dbGetQuery(CON,
                                  "SELECT
             REPLACE(cpms_id, chr(0), '') AS cpms_id,
+            REPLACE(study_site, chr(0), '') AS study_site,
             REPLACE(study_name, chr(0), '') AS study_name,
             REPLACE(scenario_id, chr(0), '') AS scenario_id,
             REPLACE(edge_id, chr(0), '') AS edge_id,
@@ -170,9 +179,12 @@ libraryServer <- function(id, auth_state, shared_state) {
       req(selected_study())
       row <- selected_study()
       
-      message("Library click — setting current_study_id to: ", row$cpms_id)
+      message(
+        "Library click — setting current study to: ",
+        row$cpms_id, " / ", row$study_site, " / ", row$scenario_id
+      )
       
-      shared_state$current_study_id <- as.character(row$cpms_id)
+      shared_state$current_study <- build_study_ref(row)
       shinyjs::runjs('$("a[data-value=\'tab_study\']").trigger("click")')
       
       selected_study(NULL)
@@ -183,6 +195,7 @@ libraryServer <- function(id, auth_state, shared_state) {
       studies <- DBI::dbGetQuery(CON,
                                  "SELECT
             REPLACE(cpms_id, chr(0), '') AS cpms_id,
+            REPLACE(study_site, chr(0), '') AS study_site,
             REPLACE(study_name, chr(0), '') AS study_name,
             REPLACE(scenario_id, chr(0), '') AS scenario_id,
             REPLACE(edge_id, chr(0), '') AS edge_id,
@@ -213,6 +226,10 @@ libraryServer <- function(id, auth_state, shared_state) {
                 span(
                   style = "background: #e8f4fd; color: #1f5f8b; padding: 0.2rem 0.65rem; border-radius: 1rem; font-size: 0.75rem; font-weight: 600;",
                   paste0("Scenario ", row$scenario_id)
+                ),
+                span(
+                  style = "background: #edf7ed; color: #1f6f43; padding: 0.2rem 0.65rem; border-radius: 1rem; font-size: 0.75rem; font-weight: 600;",
+                  row$study_site %||% "Site unknown"
                 ),
                 span(
                   style = "background: #f0f4f8; color: #697786; padding: 0.2rem 0.65rem; border-radius: 1rem; font-size: 0.75rem; font-weight: 600;",
@@ -249,4 +266,8 @@ libraryServer <- function(id, auth_state, shared_state) {
     })
     
   })
+}
+
+`%||%` <- function(a, b) {
+  if (is.null(a) || is.na(a) || !nzchar(as.character(a))) b else a
 }

@@ -63,6 +63,14 @@ adminUI <- function(id) {
           )
         )
       )
+    ),
+    fluidRow(
+      bs4Card(
+        title = "App Log Files",
+        width = 12,
+        status = "primary",
+        uiOutput(ns("log_files"))
+      )
     )
   )
 }
@@ -89,6 +97,12 @@ adminServer <- function(id, auth_state) {
       list_users_for_admin()
     })
 
+    current_log_files <- reactive({
+      invalidateLater(5000, session)
+      prune_app_run_log_files(retention_hours = 24L)
+      list_app_run_log_files()
+    })
+
     observeEvent(input$save_ict_dir, {
       req(input$ict_dir != "")
 
@@ -100,9 +114,18 @@ adminServer <- function(id, auth_state) {
         )
 
         ICT_UPLOAD_DIR <<- input$ict_dir
+        log_event(
+          level = "INFO",
+          area = "admin",
+          message = "Settings updated",
+          user_id = auth_state$user_id,
+          username = auth_state$username,
+          session_id = auth_state$session_id,
+          details = list(setting_key = "ict_upload_dir")
+        )
         showNotification("Settings saved", type = "message", duration = 5)
       }, error = function(e) {
-        message("Settings error: ", e$message)
+        app_log_exception("admin", "ICT upload directory save failed", e)
         showNotification("Failed to save settings", type = "error")
       })
     })
@@ -117,9 +140,18 @@ adminServer <- function(id, auth_state) {
           params = list(input$edge_dir)
         )
         EDGE_OUTPUT_DIR <<- input$edge_dir
+        log_event(
+          level = "INFO",
+          area = "admin",
+          message = "Settings updated",
+          user_id = auth_state$user_id,
+          username = auth_state$username,
+          session_id = auth_state$session_id,
+          details = list(setting_key = "edge_output_dir")
+        )
         showNotification("Edge output directory saved", type = "message", duration = 5)
       }, error = function(e) {
-        message("Settings error: ", e$message)
+        app_log_exception("admin", "EDGE output directory save failed", e)
         showNotification("Failed to save settings", type = "error")
       })
     })
@@ -318,6 +350,79 @@ adminServer <- function(id, auth_state) {
       )
       updateTextInput(session, "reset_password_value", value = "")
       showNotification("Temporary password reset.", type = "message")
+    })
+
+    observe({
+      files <- current_log_files()
+
+      if (nrow(files) == 0) {
+        return()
+      }
+
+      lapply(seq_len(nrow(files)), function(i) {
+        local({
+          row <- files[i, , drop = FALSE]
+          output[[paste0("download_log_", i)]] <- downloadHandler(
+            filename = function() {
+              row$file_name[[1]]
+            },
+            content = function(file) {
+              file.copy(row$file_path[[1]], file, overwrite = TRUE)
+            }
+          )
+        })
+      })
+    })
+
+    output$log_files <- renderUI({
+      files <- current_log_files()
+
+      if (nrow(files) == 0) {
+        return(
+          div(
+            style = "color: #697786;",
+            "No app log files found yet."
+          )
+        )
+      }
+
+      div(
+        style = paste(
+          "display: flex;",
+          "flex-direction: column;",
+          "gap: 0.75rem;",
+          "max-height: 420px;",
+          "overflow-y: auto;",
+          "padding-right: 0.25rem;"
+        ),
+        lapply(seq_len(nrow(files)), function(i) {
+          row <- files[i, , drop = FALSE]
+
+          div(
+            style = paste(
+              "display: flex;",
+              "justify-content: space-between;",
+              "align-items: center;",
+              "gap: 1rem;",
+              "padding: 0.75rem 1rem;",
+              "border: 1px solid #e9ecef;",
+              "border-radius: 0.5rem;"
+            ),
+            div(
+              div(style = "font-weight: 600; color: #1d2a36;", row$file_name[[1]]),
+              div(
+                style = "font-size: 0.85rem; color: #697786;",
+                paste0("Modified: ", row$modified_at[[1]], " | Size: ", row$size_kb[[1]], " KB")
+              )
+            ),
+            downloadButton(
+              outputId = session$ns(paste0("download_log_", i)),
+              label = "Download",
+              class = "btn-secondary btn-sm"
+            )
+          )
+        })
+      )
     })
 
     output$password_notice <- renderText({

@@ -40,6 +40,7 @@ ca_init_table <- function(con = CON) {
       id                  INTEGER PRIMARY KEY DEFAULT nextval('addon_ca_row_seq'),
       custom_activity_id  VARCHAR NOT NULL,    -- e.g. '59904-001'
       cpms_id             VARCHAR NOT NULL,
+      study_site          VARCHAR,
       study_name          VARCHAR,
       scenario_id         VARCHAR,
       Study_Arm           VARCHAR NOT NULL,
@@ -53,11 +54,17 @@ ca_init_table <- function(con = CON) {
     );
   ")
   
-  # An index on (cpms_id, custom_activity_id) speeds up the common queries:
-  # load-all-for-run, delete-by-activity, next-id lookup.
+  addon_cols <- dbListFields(con, "addon_custom_activities")
+  if (!"study_site" %in% addon_cols) {
+    dbExecute(con, "ALTER TABLE addon_custom_activities ADD COLUMN study_site VARCHAR;")
+    message("addon_custom_activities.study_site column added")
+  }
+
+  # An index on the study identity plus custom_activity_id speeds up the
+  # common queries: load-all-for-run, delete-by-activity, next-id lookup.
   dbExecute(con, "
     CREATE INDEX IF NOT EXISTS idx_addon_ca_cpms
-      ON addon_custom_activities (cpms_id, custom_activity_id);
+      ON addon_custom_activities (cpms_id, study_site, scenario_id, custom_activity_id);
   ")
   
   message("addon_custom_activities table initialised")

@@ -393,9 +393,11 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   
   custom_data <- data |> filter(sheet_name == .CUSTOM_SHEET)
   
-  message("[CA] build_all_edge_templates: special rows=", nrow(special_data),
-          " main rows=", nrow(main_data),
-          " custom rows=", nrow(custom_data))
+  app_log_info("template", "Building EDGE templates", list(
+    special_rows = nrow(special_data),
+    main_rows = nrow(main_data),
+    custom_rows = nrow(custom_data)
+  ))
   
   special_list <- special_data |>
     group_by(sheet_name) |>
@@ -407,8 +409,10 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
     group_map(~ .build_main(.x), .keep = TRUE) |>
     setNames(sort(unique(main_data$Study_Arm)))
   
-  message("[CA] special arms: ", paste(names(special_list), collapse = " / "))
-  message("[CA] main arms: ",    paste(names(main_list),    collapse = " / "))
+  app_log_info("template", "Template arms prepared", list(
+    special_arms = paste(names(special_list), collapse = "/"),
+    main_arms = paste(names(main_list), collapse = "/")
+  ))
   
   # ── ADDON ── Merge custom rows into their selected arms' templates ────────
   # For each Study_Arm that has custom rows, build the custom block and
@@ -417,21 +421,31 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   # try main first, then special, then create a new entry.
   if (nrow(custom_data) > 0) {
     custom_built <- .build_custom(custom_data)
-    message("[CA] custom_built arms: ",
-            paste(unique(custom_built$`Template Name`), collapse = " / "),
-            " (", nrow(custom_built), " rows)")
+    app_log_info("template", "Custom activity template rows built", list(
+      arms = paste(unique(custom_built$`Template Name`), collapse = "/"),
+      rows = nrow(custom_built)
+    ))
     
     for (arm in unique(custom_built$`Template Name`)) {
       arm_custom <- custom_built |> filter(`Template Name` == arm)
       
       if (arm %in% names(main_list)) {
-        message("[CA] merging ", nrow(arm_custom), " custom rows into main_list[['", arm, "']]")
+        app_log_info("template", "Merged custom rows into main template", list(
+          arm = arm,
+          rows = nrow(arm_custom)
+        ))
         main_list[[arm]] <- bind_rows(main_list[[arm]], arm_custom)
       } else if (arm %in% names(special_list)) {
-        message("[CA] merging ", nrow(arm_custom), " custom rows into special_list[['", arm, "']]")
+        app_log_info("template", "Merged custom rows into special template", list(
+          arm = arm,
+          rows = nrow(arm_custom)
+        ))
         special_list[[arm]] <- bind_rows(special_list[[arm]], arm_custom)
       } else {
-        message("[CA] creating new main_list entry for '", arm, "'")
+        app_log_info("template", "Created new template arm from custom rows", list(
+          arm = arm,
+          rows = nrow(arm_custom)
+        ))
         main_list[[arm]] <- arm_custom
       }
     }

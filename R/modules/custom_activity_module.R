@@ -190,7 +190,12 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
     customs <- reactive({
       invalidation_tick()
       req(shared_state$cpms_id)
-      ca_load(as.character(shared_state$cpms_id))
+      req(shared_state$study_site, shared_state$scenario_id)
+      ca_load(
+        cpms_id = as.character(shared_state$cpms_id),
+        study_site = as.character(shared_state$study_site),
+        scenario_id = as.character(shared_state$scenario_id)
+      )
     })
     
     # Currently expanded row id, tracked server-side so the Delete button
@@ -201,7 +206,11 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
     observeEvent(shared_state$current_step, {
       if (isTRUE(shared_state$current_step == "step4") &&
           !is.null(shared_state$cpms_id)) {
-        ca_clear_run(as.character(shared_state$cpms_id))
+        ca_clear_run(
+          cpms_id = as.character(shared_state$cpms_id),
+          study_site = as.character(shared_state$study_site %||% NA_character_),
+          scenario_id = as.character(shared_state$scenario_id %||% NA_character_)
+        )
         .bump()
       }
     }, ignoreNULL = TRUE, ignoreInit = TRUE)
@@ -656,6 +665,7 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
       
       activity <- list(
         cpms_id     = as.character(shared_state$cpms_id),
+        study_site  = as.character(shared_state$study_site %||% NA_character_),
         study_name  = as.character(shared_state$study_name  %||% NA_character_),
         scenario_id = as.character(shared_state$scenario_id %||% NA_character_),
         Study_Arm   = input$modal_arm,

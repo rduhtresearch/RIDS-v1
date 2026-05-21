@@ -6,11 +6,14 @@
 # default of `CON` to match RIDS conventions.
 #
 # Function contract:
-#   ca_next_id(cpms_id, con)             -> "<cpms_id>-NNN" (readable, per-study)
+#   ca_next_id(cpms_id, study_site, scenario_id, con)
+#'                                       -> "<cpms_id>-NNN" (readable, per-study)
 #   ca_insert(activity, con)             -> custom_activity_id (the id just written)
-#   ca_load(cpms_id, con)                -> tibble: all custom activities for run
+#   ca_load(cpms_id, study_site, scenario_id, con)
+#'                                       -> tibble: all custom activities for run
 #   ca_delete(custom_activity_id, con)   -> integer: rows deleted
-#   ca_clear_run(cpms_id, con)           -> integer: rows deleted
+#   ca_clear_run(cpms_id, study_site, scenario_id, con)
+#'                                       -> integer: rows deleted
 # ==============================================================================
 
 suppressPackageStartupMessages({
@@ -31,20 +34,34 @@ suppressPackageStartupMessages({
 #' editing of the same study, switch to a transaction or a per-cpms_id sequence.
 #'
 #' @param cpms_id  Character. The study's CPMS ID.
-#' @param con      DBI connection.
+#' @param study_site  Character. The study site.
+#' @param scenario_id Character. The scenario ID.
+#' @param con         DBI connection.
 #' @return         Character. The next available id, e.g. "59904-001".
-ca_next_id <- function(cpms_id, con = CON) {
+ca_next_id <- function(cpms_id, study_site, scenario_id, con = CON) {
   
   if (!is.character(cpms_id) || length(cpms_id) != 1L ||
       is.na(cpms_id) || !nzchar(cpms_id)) {
     stop("ca_next_id(): `cpms_id` must be a non-empty single string.")
   }
+  if (!is.character(study_site) || length(study_site) != 1L ||
+      is.na(study_site) || !nzchar(study_site)) {
+    stop("ca_next_id(): `study_site` must be a non-empty single string.")
+  }
+  if (!is.character(scenario_id) || length(scenario_id) != 1L ||
+      is.na(scenario_id) || !nzchar(scenario_id)) {
+    stop("ca_next_id(): `scenario_id` must be a non-empty single string.")
+  }
   
   existing <- dbGetQuery(con, "
     SELECT DISTINCT custom_activity_id
     FROM addon_custom_activities
-    WHERE cpms_id = ?
-  ", params = list(as.character(cpms_id)))
+    WHERE cpms_id = ? AND study_site = ? AND scenario_id = ?
+  ", params = list(
+    as.character(cpms_id),
+    as.character(study_site),
+    as.character(scenario_id)
+  ))
   
   if (nrow(existing) == 0) {
     next_n <- 1L
@@ -67,7 +84,7 @@ ca_next_id <- function(cpms_id, con = CON) {
 #' single transaction so partial writes can't leave orphan rows.
 #'
 #' @param activity  Named list with fields:
-#'                    cpms_id, study_name, scenario_id, Study_Arm, Activity,
+#'                    cpms_id, study_site, study_name, scenario_id, Study_Arm, Activity,
 #'                    mode ("single_cc" | "baseline"),
 #'                    rows (data.frame: cost_centre, amount),
 #'                    created_by (integer; nullable).
@@ -75,7 +92,7 @@ ca_next_id <- function(cpms_id, con = CON) {
 #' @return          Character. The custom_activity_id just minted.
 ca_insert <- function(activity, con = CON) {
   
-  required <- c("cpms_id", "Study_Arm", "Activity", "mode", "rows")
+  required <- c("cpms_id", "study_site", "scenario_id", "Study_Arm", "Activity", "mode", "rows")
   missing  <- setdiff(required, names(activity))
   if (length(missing) > 0) {
     stop("ca_insert(): `activity` missing fields: ", paste(missing, collapse = ", "))
@@ -95,12 +112,18 @@ ca_insert <- function(activity, con = CON) {
     stop("ca_insert(): `rows` must have columns: cost_centre, amount.")
   }
   
-  custom_activity_id <- ca_next_id(activity$cpms_id, con = con)
+  custom_activity_id <- ca_next_id(
+    cpms_id = activity$cpms_id,
+    study_site = activity$study_site,
+    scenario_id = activity$scenario_id,
+    con = con
+  )
   
   # Build the insert tibble — one row per slot.
   insert_df <- tibble(
     custom_activity_id = custom_activity_id,
     cpms_id            = as.character(activity$cpms_id),
+    study_site         = as.character(activity$study_site),
     study_name         = as.character(activity$study_name %||% NA_character_),
     scenario_id        = as.character(activity$scenario_id %||% NA_character_),
     Study_Arm          = as.character(activity$Study_Arm),
@@ -129,24 +152,38 @@ ca_insert <- function(activity, con = CON) {
 #' result with ca_build_custom_rows() per (custom_activity_id) group to derive
 #' the posting-line-shaped rows for export.
 #'
-#' @param cpms_id  Character. The study's CPMS ID.
-#' @param con      DBI connection.
-#' @return         Tibble. Empty if no custom activities exist for this run.
-ca_load <- function(cpms_id, con = CON) {
+#' @param cpms_id      Character. The study's CPMS ID.
+#' @param study_site   Character. The study site.
+#' @param scenario_id  Character. The scenario ID.
+#' @param con          DBI connection.
+#' @return             Tibble. Empty if no custom activities exist for this run.
+ca_load <- function(cpms_id, study_site, scenario_id, con = CON) {
   
   if (!is.character(cpms_id) || length(cpms_id) != 1L ||
       is.na(cpms_id) || !nzchar(cpms_id)) {
     stop("ca_load(): `cpms_id` must be a non-empty single string.")
   }
+  if (!is.character(study_site) || length(study_site) != 1L ||
+      is.na(study_site) || !nzchar(study_site)) {
+    stop("ca_load(): `study_site` must be a non-empty single string.")
+  }
+  if (!is.character(scenario_id) || length(scenario_id) != 1L ||
+      is.na(scenario_id) || !nzchar(scenario_id)) {
+    stop("ca_load(): `scenario_id` must be a non-empty single string.")
+  }
   
   df <- dbGetQuery(con, "
-    SELECT id, custom_activity_id, cpms_id, study_name, scenario_id,
+    SELECT id, custom_activity_id, cpms_id, study_site, study_name, scenario_id,
            Study_Arm, Activity, mode, slot_num, cost_centre, amount,
            created_by, created_at
     FROM addon_custom_activities
-    WHERE cpms_id = ?
+    WHERE cpms_id = ? AND study_site = ? AND scenario_id = ?
     ORDER BY custom_activity_id, slot_num
-  ", params = list(as.character(cpms_id)))
+  ", params = list(
+    as.character(cpms_id),
+    as.character(study_site),
+    as.character(scenario_id)
+  ))
   
   as_tibble(df)
 }
@@ -181,20 +218,34 @@ ca_delete <- function(custom_activity_id, con = CON) {
 #' Called when the user navigates back to step 3 (per the v1 simplicity rule:
 #' going back wipes custom activities). Also useful on fresh entry to step 4.
 #'
-#' @param cpms_id  Character. The study's CPMS ID.
-#' @param con      DBI connection.
-#' @return         Integer. Number of rows deleted.
-ca_clear_run <- function(cpms_id, con = CON) {
+#' @param cpms_id      Character. The study's CPMS ID.
+#' @param study_site   Character. The study site.
+#' @param scenario_id  Character. The scenario ID.
+#' @param con          DBI connection.
+#' @return             Integer. Number of rows deleted.
+ca_clear_run <- function(cpms_id, study_site, scenario_id, con = CON) {
   
   if (!is.character(cpms_id) || length(cpms_id) != 1L ||
       is.na(cpms_id) || !nzchar(cpms_id)) {
     stop("ca_clear_run(): `cpms_id` must be a non-empty single string.")
   }
+  if (!is.character(study_site) || length(study_site) != 1L ||
+      is.na(study_site) || !nzchar(study_site)) {
+    stop("ca_clear_run(): `study_site` must be a non-empty single string.")
+  }
+  if (!is.character(scenario_id) || length(scenario_id) != 1L ||
+      is.na(scenario_id) || !nzchar(scenario_id)) {
+    stop("ca_clear_run(): `scenario_id` must be a non-empty single string.")
+  }
   
   dbExecute(con, "
     DELETE FROM addon_custom_activities
-    WHERE cpms_id = ?
-  ", params = list(as.character(cpms_id)))
+    WHERE cpms_id = ? AND study_site = ? AND scenario_id = ?
+  ", params = list(
+    as.character(cpms_id),
+    as.character(study_site),
+    as.character(scenario_id)
+  ))
 }
 
 # Null-coalesce helper (kept local to the addon)

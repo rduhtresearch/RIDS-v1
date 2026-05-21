@@ -448,11 +448,14 @@ resolve_entities <- function(posting_plan) {
 #' (EDGE import, reporting, etc.) can join unambiguously on
 #' (cpms_id, Visit, Study_Arm, Activity) -- never the old overloaded Visit_Name.
 select_output_cols <- function(posting_plan) {
+  if (!"study_site" %in% names(posting_plan)) {
+    posting_plan$study_site <- NA_character_
+  }
   
   # Core output columns (always present)
   core <- c(
     "row_id", "scenario_id", "row_category_auto", "calc_tag", "row_category",
-    "is_medic", "cpms_id", "study_name", "Study_Arm", "Activity", "Visit",
+    "is_medic", "cpms_id", "study_site", "study_name", "Study_Arm", "Activity", "Visit",
     "posting_line_type_id", "posting_amount",
     "destination_bucket", "destination_entity", "cost_code"
   )
@@ -560,20 +563,23 @@ prepare_posting_input <- function(ict,
                                   ict_db_path = NULL) {
   
   # 1. Read & validate ICT
-  message("--- Reading ICT data ---")
+  app_log_info("posting", "Reading ICT data")
   df <- read_ict_workbook(ict)
   
   # 2. Normalise rows
-  message("--- Normalising row context ---")
+  app_log_info("posting", "Normalising row context", list(
+    scenario_id = scenario_id,
+    ruleset_id = ruleset_id
+  ))
   df <- normalise_rows(df, scenario_id, ruleset_id)
   
   # 3. Optional: join contract costs from ict_costing_tbl
   if (!is.null(ict_db_path)) {
-    message("--- Joining ICT contract costs (corrected keys) ---")
+    app_log_info("posting", "Joining ICT contract costs")
     df <- join_ict_costs(df, ict_db_path)
   }
   
-  message("--- Prepared posting input: ", nrow(df), " rows ---")
+  app_log_info("posting", "Prepared posting input", list(rows = nrow(df)))
   df
 }
 
@@ -593,28 +599,34 @@ evaluate_posting_plan <- function(prepared_df,
   # calc_tag is already cleaned/handled in normalise_rows(),
   # and row_category is already set there too.
   
-  message("--- Loading finance rules ---")
+  app_log_info("posting", "Loading finance rules", list(
+    scenario_id = scenario_id,
+    ruleset_id = ruleset_id
+  ))
   rules <- load_rules(rules_db_path, ruleset_id)
   
-  message("--- Applying distribution rules ---")
+  app_log_info("posting", "Applying distribution rules")
   plan <- apply_dist_rules(prepared_df, rules$dist_rules, scenario_id)
   
-  message("--- Calculating posting amounts ---")
+  app_log_info("posting", "Calculating posting amounts")
   plan <- apply_amount_map(plan, rules$amount_map, mff_rate)
   
-  message("--- Resolving routing ---")
+  app_log_info("posting", "Resolving routing")
   plan <- apply_routing(plan, rules$routing_rules)
   
-  message("--- Resolving destination entities ---")
+  app_log_info("posting", "Resolving destination entities")
   plan <- resolve_entities(plan)
   
   out <- select_output_cols(plan)
   
   if (!is.null(output_path)) {
     write_csv(out, output_path)
-    message("Wrote posting plan to: ", output_path)
+    app_log_info("posting", "Posting plan written", list(path = output_path))
   }
   
-  message("--- Posting plan complete: ", nrow(out), " rows, scenario ", scenario_id, " ---")
+  app_log_info("posting", "Posting plan complete", list(
+    rows = nrow(out),
+    scenario_id = scenario_id
+  ))
   invisible(out)
 }
