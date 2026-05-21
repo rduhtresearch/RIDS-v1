@@ -43,7 +43,9 @@ adjust_posting_lines <- function(out) {
     
     out %>%
       filter(!sheet_name %in% .ADJUSTMENT_SPECIAL) %>%
-      mutate(adj_group = trimws(if_else(sheet_name == "Pharmacy", Study_Arm, sheet_name))) %>%
+      # Group scheduled rows by Study_Arm so SSP is adjusted independently
+      # from the main scheduled arm at the same visit.
+      mutate(adj_group = trimws(coalesce(Study_Arm, sheet_name))) %>%
       .adjust(c("adj_group", "Visit", "scenario_id")) %>%
       select(-adj_group)
   )

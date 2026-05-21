@@ -16,6 +16,7 @@ source("R/modules/help_mod.R")
 source("R/modules/library_mod.R")
 source("R/modules/edge_builder_mod.R")
 source("R/modules/study_workspace_mod.R")
+source("R/modules/custom_activity_module.R",  local = FALSE)
 
 ui <- tagList(
   tags$head(

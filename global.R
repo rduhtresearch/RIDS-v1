@@ -30,6 +30,14 @@ source("R/utils/adjust.r")
 source("R/utils/build_template.r")
 source("R/utils/validate_ict_workbook.r")
 
+# Custom activity source files
+source("R/addons/custom_activities/ca_build_custom_rows.R",    local = FALSE)
+source("R/addons/custom_activities/ca_schema.R",               local = FALSE)
+source("R/addons/custom_activities/ca_ref_activities.R",       local = FALSE)
+source("R/addons/custom_activities/ca_queries.R",              local = FALSE)
+source("R/addons/custom_activities/ca_assign_edge_keys.R",     local = FALSE)
+source("R/addons/custom_activities/apply_custom_activities.R", local = FALSE)
+
 # ==============================================================================
 # GLOBAL CONFIGURATION & INITIALIZATION
 # ==============================================================================
