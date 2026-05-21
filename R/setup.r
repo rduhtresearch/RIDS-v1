@@ -2,6 +2,8 @@
 # SETUP & AUTHENTICATION
 # ==============================================================================
 source("R/utils/auth.r", local = FALSE)
+source("R/addons/custom_activities/ca_schema.R", local = FALSE)
+source("R/addons/custom_activities/ca_ref_activities.R", local = FALSE)
 
 # ==============================================================================
 # 01_BUILD_RULES_DB_AH.R
@@ -544,4 +546,6 @@ db_main <- function() {
   settings_table()
   specialities_table()
   posting_lines_table()
+  ca_init_table()
+  ca_init_ref_activities()
 }
