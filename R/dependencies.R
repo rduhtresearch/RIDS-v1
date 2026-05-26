@@ -20,6 +20,26 @@ required_packages <- c(
   "zip"
 )
 
+ensure_user_library <- function() {
+  default_lib <- normalizePath(.libPaths()[1], winslash = "/", mustWork = FALSE)
+  default_writable <- dir.exists(default_lib) && file.access(default_lib, 2) == 0
+
+  if (isTRUE(default_writable)) {
+    return(invisible(default_lib))
+  }
+
+  user_lib <- Sys.getenv("R_LIBS_USER", unset = "")
+  if (!nzchar(user_lib)) {
+    user_lib <- path.expand("~/R/win-library")
+  }
+
+  dir.create(user_lib, recursive = TRUE, showWarnings = FALSE)
+  .libPaths(unique(c(normalizePath(user_lib, winslash = "/", mustWork = FALSE), .libPaths())))
+  invisible(user_lib)
+}
+
+ensure_user_library()
+
 missing_packages <- required_packages[!required_packages %in% installed.packages()[, "Package"]]
 
 if (length(missing_packages) > 0) {

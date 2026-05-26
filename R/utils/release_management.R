@@ -129,6 +129,72 @@ export_git_snapshot <- function(repo_dir, ref, target_dir, overwrite = FALSE) {
   invisible(target_dir)
 }
 
+copy_directory_contents <- function(from_dir, to_dir) {
+  dir.create(to_dir, recursive = TRUE, showWarnings = FALSE)
+
+  entries <- list.files(from_dir, all.files = TRUE, no.. = TRUE, full.names = TRUE)
+  if (length(entries) == 0) {
+    return(invisible(to_dir))
+  }
+
+  ok <- file.copy(entries, to_dir, recursive = TRUE, overwrite = TRUE, copy.mode = TRUE)
+  if (!all(ok)) {
+    failed <- basename(entries[!ok])
+    stop("Failed to copy release files: ", paste(failed, collapse = ", "))
+  }
+
+  invisible(to_dir)
+}
+
+export_working_tree_snapshot <- function(repo_dir, target_dir, overwrite = FALSE) {
+  repo_dir <- normalizePath(repo_dir, winslash = "/", mustWork = TRUE)
+  target_dir <- normalizePath(target_dir, winslash = "/", mustWork = FALSE)
+
+  if (dir.exists(target_dir)) {
+    existing_entries <- list.files(target_dir, all.files = TRUE, no.. = TRUE)
+    if (length(existing_entries) > 0 && !isTRUE(overwrite)) {
+      stop("Release folder already exists and is not empty: ", target_dir)
+    }
+
+    if (isTRUE(overwrite)) {
+      unlink(target_dir, recursive = TRUE, force = TRUE)
+    }
+  }
+
+  dir.create(target_dir, recursive = TRUE, showWarnings = FALSE)
+
+  keep_entries <- c("app.R", "global.R", "config.R", "R", "www")
+  missing_entries <- keep_entries[!file.exists(file.path(repo_dir, keep_entries))]
+  if (length(missing_entries) > 0) {
+    stop(
+      "Cannot bootstrap a release from the working tree because required files are missing: ",
+      paste(missing_entries, collapse = ", ")
+    )
+  }
+
+  for (entry in keep_entries) {
+    source_path <- file.path(repo_dir, entry)
+    target_path <- file.path(target_dir, entry)
+
+    if (dir.exists(source_path)) {
+      copy_directory_contents(source_path, target_path)
+    } else {
+      dir.create(dirname(target_path), recursive = TRUE, showWarnings = FALSE)
+      ok <- file.copy(source_path, target_path, overwrite = TRUE, copy.mode = TRUE)
+      if (!isTRUE(ok)) {
+        stop("Failed to copy release file: ", entry)
+      }
+    }
+  }
+
+  ensure_required_app_files(target_dir)
+  invisible(target_dir)
+}
+
+default_bootstrap_release_version <- function() {
+  paste0("local-", format(Sys.Date(), "%Y.%m.%d"))
+}
+
 read_release_pointer <- function(path, default = "") {
   if (!file.exists(path)) {
     return(default)

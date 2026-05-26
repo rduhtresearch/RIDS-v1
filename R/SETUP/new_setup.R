@@ -147,6 +147,27 @@ source("R/setup.r")
 CON <- open_duckdb_connection(DB_DIR)
 on.exit(try(close_duckdb_connection(CON), silent = TRUE), add = TRUE)
 
+ensure_setup_connection <- function(con, db_dir) {
+  is_valid <- tryCatch(DBI::dbIsValid(con), error = function(e) FALSE)
+  ping_ok <- FALSE
+
+  if (isTRUE(is_valid)) {
+    ping_ok <- tryCatch({
+      DBI::dbGetQuery(con, "SELECT 1")
+      TRUE
+    }, error = function(e) FALSE)
+  }
+
+  if (isTRUE(is_valid) && isTRUE(ping_ok)) {
+    return(con)
+  }
+
+  try(close_duckdb_connection(con), silent = TRUE)
+  message("Reopening DuckDB connection for setup.")
+  open_duckdb_connection(db_dir)
+}
+
+CON <- ensure_setup_connection(CON, DB_DIR)
 db_main()
 upsert_setting(CON, "ict_upload_dir", config$ict_upload_dir)
 upsert_setting(CON, "edge_output_dir", config$edge_output_dir)
@@ -182,9 +203,21 @@ if (!nzchar(current_release)) {
     )
     message("Initial release bootstrapped from Git tag: ", head_tag)
   } else {
-    message("No Git tag is checked out at HEAD, so no active release was created yet.")
-    message("After setup, publish the first tagged release with:")
-    message("Rscript R/SETUP/release_publish.R publish --version vX.Y.Z")
+    bootstrap_version <- default_bootstrap_release_version()
+    bootstrap_release_dir <- file.path(RELEASES_DIR, bootstrap_version)
+
+    export_working_tree_snapshot(APP_DIR, bootstrap_release_dir, overwrite = TRUE)
+    run_release_smoke_check(bootstrap_release_dir, deployment_config_path)
+    write_release_pointer(current_release_path, bootstrap_version)
+    append_deploy_log(
+      deploy_log_path,
+      action = "bootstrap",
+      version = bootstrap_version,
+      status = "success",
+      message = "Initial release created from the current working tree during setup."
+    )
+    message("Initial release bootstrapped from the current working tree: ", bootstrap_version)
+    message("You can tag and publish a formal release later if needed.")
   }
 } else {
   message("Current active release already set to: ", current_release)

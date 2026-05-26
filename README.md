@@ -70,9 +70,11 @@ What setup does:
 3. Creates `shared/deployment_config.R`.
 4. Creates `deployment/Launch RIDS.bat`.
 5. Creates the shared DuckDB database if needed.
-6. If the current `HEAD` commit already has a Git tag, bootstraps the first live release automatically.
+6. Bootstraps the first live release automatically.
 
-If setup says no active release was created yet, publish a tagged version using the maintainer steps below.
+On a first-time setup, if `HEAD` already has a Git tag, setup uses that tag.
+If not, setup creates a local bootstrap release from the current working tree so
+the launcher works immediately.
 
 ## User Launch Steps
 
@@ -193,6 +195,8 @@ Rollback does not copy files, rebuild the database, or touch uploads and outputs
 ```r
 source("R/SETUP/new_setup.R")
 ```
+
+This is enough for a first local/shared deployment on a new machine.
 
 ### Publish a release
 
