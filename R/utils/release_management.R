@@ -66,9 +66,10 @@ ensure_git_available <- function() {
 git_exact_tag <- function(repo_dir = getwd(), ref = "HEAD") {
   ensure_git_available()
 
-  output <- tryCatch(
+  output <- suppressWarnings(tryCatch(
     run_system_command("git", c("describe", "--tags", "--exact-match", ref), workdir = repo_dir),
     error = function(e) structure(conditionMessage(e), status = 1L)
+  )
   )
 
   status <- attr(output, "status") %||% 0L
@@ -163,8 +164,10 @@ export_working_tree_snapshot <- function(repo_dir, target_dir, overwrite = FALSE
 
   dir.create(target_dir, recursive = TRUE, showWarnings = FALSE)
 
-  keep_entries <- c("app.R", "global.R", "config.R", "R", "www")
-  missing_entries <- keep_entries[!file.exists(file.path(repo_dir, keep_entries))]
+  required_entries <- c("app.R", "global.R", "R", "www")
+  optional_entries <- c("config.R")
+  keep_entries <- c(required_entries, optional_entries[file.exists(file.path(repo_dir, optional_entries))])
+  missing_entries <- required_entries[!file.exists(file.path(repo_dir, required_entries))]
   if (length(missing_entries) > 0) {
     stop(
       "Cannot bootstrap a release from the working tree because required files are missing: ",

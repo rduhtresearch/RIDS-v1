@@ -9,7 +9,7 @@
 # 3. Creates or updates the shared deployment config
 # 4. Creates the central Windows launcher
 # 5. Initialises the central DuckDB database if needed
-# 6. Optionally bootstraps the first active release when HEAD is already tagged
+# 6. Bootstraps the first active release automatically
 # ==============================================================================
 
 source("R/dependencies.R")
@@ -141,37 +141,53 @@ library(duckdb)
 
 db_already_exists <- file.exists(DB_DIR)
 
-source("R/utils/auth.r")
-source("R/setup.r")
+run_database_setup <- function(db_dir, config) {
+  setup_env <- new.env(parent = globalenv())
+  sys.source("R/utils/deployment_config.R", envir = setup_env)
+  sys.source("R/utils/auth.r", envir = setup_env)
+  sys.source("R/addons/custom_activities/ca_schema.R", envir = setup_env)
+  sys.source("R/addons/custom_activities/ca_ref_activities.R", envir = setup_env)
+  sys.source("R/setup.r", envir = setup_env)
 
-CON <- open_duckdb_connection(DB_DIR)
-on.exit(try(close_duckdb_connection(CON), silent = TRUE), add = TRUE)
+  con <- setup_env$open_duckdb_connection(db_dir)
+  on.exit(try(setup_env$close_duckdb_connection(con), silent = TRUE), add = TRUE)
 
-ensure_setup_connection <- function(con, db_dir) {
-  is_valid <- tryCatch(DBI::dbIsValid(con), error = function(e) FALSE)
-  ping_ok <- FALSE
+  is_ready <- tryCatch({
+    DBI::dbIsValid(con)
+  }, error = function(e) FALSE)
 
-  if (isTRUE(is_valid)) {
-    ping_ok <- tryCatch({
-      DBI::dbGetQuery(con, "SELECT 1")
-      TRUE
-    }, error = function(e) FALSE)
+  if (!isTRUE(is_ready)) {
+    stop("DuckDB connection was not valid immediately after opening.")
   }
 
-  if (isTRUE(is_valid) && isTRUE(ping_ok)) {
-    return(con)
-  }
+  tryCatch(
+    DBI::dbGetQuery(con, "SELECT 1"),
+    error = function(e) {
+      stop("DuckDB connection test failed before schema setup: ", conditionMessage(e))
+    }
+  )
 
-  try(close_duckdb_connection(con), silent = TRUE)
-  message("Reopening DuckDB connection for setup.")
-  open_duckdb_connection(db_dir)
+  setup_env$CON <- con
+  setup_env$ict_table()
+  setup_env$meta_table()
+  setup_env$init_db()
+  setup_env$user_tables()
+  setup_env$build_rules_tables()
+  setup_env$settings_table()
+  setup_env$app_logs_table()
+  setup_env$specialities_table()
+  setup_env$posting_lines_table()
+  setup_env$ca_init_table()
+  setup_env$ca_init_ref_activities()
+
+  upsert_setting(con, "ict_upload_dir", config$ict_upload_dir)
+  upsert_setting(con, "edge_output_dir", config$edge_output_dir)
+  upsert_setting(con, "app_log_dir", config$app_log_dir)
+
+  invisible(TRUE)
 }
 
-CON <- ensure_setup_connection(CON, DB_DIR)
-db_main()
-upsert_setting(CON, "ict_upload_dir", config$ict_upload_dir)
-upsert_setting(CON, "edge_output_dir", config$edge_output_dir)
-upsert_setting(CON, "app_log_dir", config$app_log_dir)
+run_database_setup(DB_DIR, config)
 
 if (db_already_exists) {
   message("Existing database found. Schema and settings have been checked.")
@@ -230,7 +246,7 @@ message("")
 message("Setup complete.")
 message("")
 message("Next steps:")
-message("1. If no release is active yet, publish one with R/SETUP/release_publish.R.")
-message("2. Open: ", launcher_bat_path)
-message("3. Wait for the browser to open.")
-message("4. On first launch, create the first admin account in the app.")
+message("1. Open: ", launcher_bat_path)
+message("2. Wait for the browser to open.")
+message("3. On first launch, create the first admin account in the app.")
+message("4. Later, tag and publish a formal release with R/SETUP/release_publish.R if needed.")
