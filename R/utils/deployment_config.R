@@ -10,8 +10,7 @@ deployment_config_candidates <- function(app_dir = getwd()) {
     candidates,
     file.path(app_dir, "shared", "deployment_config.R"),
     file.path(app_dir, "deployment", "deployment_config.R"),
-    file.path(dirname(dirname(app_dir)), "shared", "deployment_config.R"),
-    file.path(app_dir, "config.R")
+    file.path(dirname(dirname(app_dir)), "shared", "deployment_config.R")
   )
 
   unique(normalizePath(candidates, winslash = "/", mustWork = FALSE))

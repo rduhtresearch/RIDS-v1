@@ -2,18 +2,18 @@
 
 ## Overview
 
-RIDS now uses a lightweight manual release process designed for a small team:
+RIDS currently uses a lightweight manual deployment process.
 
 - GitHub is the source of truth for code.
-- The live app uses versioned folders under `releases/`.
+- The live app runs from versioned folders under `releases/`.
 - Shared runtime state lives under `shared/`.
-- A maintainer runs checks locally, then publishes or rolls back a version with one R script.
+- Maintainers run local R checks, pull the latest code into the shared-drive clone, and publish a named release with one R script.
 
-Users still launch the app the same way: by opening `deployment/Launch RIDS.bat`.
+Users still launch the app by opening `deployment/Launch RIDS.bat`.
 
 ## Shared Drive Layout
 
-After setup, the shared app folder will look like this:
+After setup, the shared deployment folder looks like this:
 
 ```text
 RIDS-v1/
@@ -38,7 +38,7 @@ Important points:
 
 - `releases/` contains code only.
 - `shared/` contains runtime state only.
-- `current_release.txt` says which version is live.
+- `current_release.txt` tells the launcher which version is live.
 - `deploy_log.tsv` records publish and rollback activity.
 
 ## First-Time Setup
@@ -75,6 +75,25 @@ On a first-time setup, if `HEAD` already has a Git tag, setup uses that tag.
 If not, setup creates a local bootstrap release from the current working tree so
 the launcher works immediately.
 
+## Development and Release Flow
+
+The current workflow is:
+
+1. Make a change on a branch.
+2. Run local checks:
+
+```bash
+Rscript R/CI/run_ci_checks.R
+```
+
+3. Open and merge a pull request into `main`.
+4. On the shared-drive clone, pull the latest `main`.
+5. Publish the checked-out code as a named release.
+6. Launch and verify the app.
+7. Roll back if needed.
+
+For the step-by-step operator runbook, see [DEPLOYMENT.md](/Users/tategraham/Documents/NHS/RIDS-v1/DEPLOYMENT.md:1).
+
 ## User Launch Steps
 
 Normal users only need these steps:
@@ -84,120 +103,6 @@ Normal users only need these steps:
 3. Let the browser open automatically.
 4. Sign in.
 
-## Day-to-Day Development Flow
-
-Use this flow for normal code changes.
-
-1. Create a short-lived branch from `main`.
-2. Make your changes.
-3. Run the local checks from the repo root:
-
-```bash
-Rscript R/CI/run_ci_checks.R
-```
-
-4. If checks pass, push the branch to GitHub.
-5. Open a pull request into `main`.
-6. Review and merge when ready.
-
-## Optional GitHub Actions
-
-The repo still includes GitHub Actions workflows, but they are manual-only for now.
-
-- `CI`: can be run manually from GitHub if you want a clean remote check
-- `Release Artifact`: can be run manually later if you want a packaged GitHub artifact
-
-They are not part of the required release path.
-
-## Maintainer Release Process
-
-This is the step-by-step process to put a new version live.
-
-### 1. Make sure `main` contains the release
-
-1. Confirm your PR is merged into `main`.
-2. Pull the latest `main`.
-
-Example:
-
-```bash
-git checkout main
-git pull origin main
-```
-
-### 2. Run checks locally
-
-From the repo root:
-
-```bash
-Rscript R/CI/run_ci_checks.R
-```
-
-Do not publish if this command fails.
-
-### 3. Publish the release
-
-You now have two supported paths.
-
-#### Option A: Publish the current working tree
-
-Use this when you want the simplest possible shared-drive release and do not need a Git tag yet.
-
-```bash
-Rscript R/SETUP/release_publish.R publish-local --version v0.5.0
-```
-
-What this does:
-
-1. Copies the current working tree into `releases/v0.5.0/`.
-2. Runs a lightweight smoke check.
-3. Updates `shared/current_release.txt`.
-4. Writes a line to `shared/deploy_log.tsv`.
-
-#### Option B: Publish an exact Git tag
-
-Pick a new version name such as `v0.5.0`.
-
-```bash
-git tag v0.5.0
-git push origin v0.5.0
-Rscript R/SETUP/release_publish.R publish --version v0.5.0
-```
-
-What this does:
-
-1. Verifies the tag exists.
-2. Exports that exact tagged snapshot into `releases/v0.5.0/`.
-3. Runs a lightweight smoke check.
-4. Updates `shared/current_release.txt`.
-5. Writes a line to `shared/deploy_log.tsv`.
-
-When this succeeds, `v0.5.0` becomes the live version.
-
-### 4. Confirm the release
-
-1. Open `deployment/Launch RIDS.bat`.
-2. Confirm the app loads.
-3. Confirm the footer version matches the release tag.
-
-## Rollback Process
-
-If a release needs to be reversed, switch the live pointer back to an earlier release.
-
-Example:
-
-```bash
-Rscript R/SETUP/release_publish.R rollback --version v0.4.1
-```
-
-What rollback does:
-
-1. Verifies `releases/v0.4.1/` already exists.
-2. Updates `shared/current_release.txt`.
-3. Writes a line to `shared/deploy_log.tsv`.
-
-Rollback does not copy files, rebuild the database, or touch uploads and outputs.
-
 ## Operator Reference Commands
 
 ### Run first-time setup
@@ -206,12 +111,10 @@ Rollback does not copy files, rebuild the database, or touch uploads and outputs
 source("R/SETUP/new_setup.R")
 ```
 
-This is enough for a first local/shared deployment on a new machine.
-
-### Publish a release
+### Run local checks
 
 ```bash
-Rscript R/SETUP/release_publish.R publish --version v0.5.0
+Rscript R/CI/run_ci_checks.R
 ```
 
 ### Publish the current working tree
@@ -223,7 +126,13 @@ Rscript R/SETUP/release_publish.R publish-local --version v0.5.0
 ### Rebuild an existing release folder
 
 ```bash
-Rscript R/SETUP/release_publish.R publish --version v0.5.0 --force
+Rscript R/SETUP/release_publish.R publish-local --version v0.5.0 --force
+```
+
+### Publish an exact Git tag
+
+```bash
+Rscript R/SETUP/release_publish.R publish --version v0.5.0
 ```
 
 ### Roll back to an earlier release
@@ -232,81 +141,9 @@ Rscript R/SETUP/release_publish.R publish --version v0.5.0 --force
 Rscript R/SETUP/release_publish.R rollback --version v0.4.1
 ```
 
-## Troubleshooting
-
-### Local CI checks failed
-
-1. Read the failing output from `Rscript R/CI/run_ci_checks.R`.
-2. Fix the code locally.
-3. Re-run the checks.
-
-Do not publish while local checks are failing.
-
-### Tag not found during publish
-
-This means the tag does not exist in Git yet.
-
-Check:
-
-```bash
-git tag
-```
-
-If needed, create and push the tag:
-
-```bash
-git tag v0.5.0
-git push origin v0.5.0
-```
-
-If you do not need a tag yet, use `publish-local` instead.
-
-### Shared drive unavailable
-
-If the maintainer machine cannot see the shared drive:
-
-1. Reconnect the drive.
-2. Confirm the repo is opened from the shared-drive location.
-3. Re-run the publish or rollback command.
-
-### `current_release.txt` missing
-
-This usually means no release has been published yet.
-
-Fix:
-
-1. Run setup if it has not been run.
-2. Publish the first tagged version with `release_publish.R publish --version ...`
-
-### Publish smoke check failed
-
-The publish command will stop before changing the live version.
-
-Common causes:
-
-- the shared config file is missing
-- the release folder is incomplete
-- required app files are missing
-- the tagged code no longer loads its deployment helpers cleanly
-
-Recommended response:
-
-1. Read the error printed by the publish script.
-2. Fix the code or setup issue.
-3. Re-run publish.
-
-### Launcher opens but app does not start
-
-Check:
-
-1. `shared/current_release.txt` contains a version.
-2. `releases/<that version>/app.R` exists.
-3. `shared/deployment_config.R` exists.
-4. `R` is installed on the laptop launching the app.
-
 ## Notes
 
 - `main` is the only permanent branch.
 - Each live deployment can map either to a Git tag or to a manually named working-tree snapshot.
 - Shared runtime folders should not be committed to Git.
-- This process is intentionally simple: local checks validate code, and one R script promotes or rolls back versions.
+- The current process is intentionally simple: local checks validate code, and one R script promotes or rolls back versions.
