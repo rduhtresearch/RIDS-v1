@@ -15,9 +15,10 @@ usage <- function() {
   paste(
     "Usage:",
     "  Rscript R/SETUP/release_publish.R publish --version v0.5.0",
+    "  Rscript R/SETUP/release_publish.R publish-local --version v0.5.0",
     "  Rscript R/SETUP/release_publish.R rollback --version v0.4.1",
     "Options:",
-    "  --force    Rebuild an existing release folder during publish.",
+    "  --force    Rebuild an existing release folder during publish or publish-local.",
     sep = "\n"
   )
 }
@@ -65,8 +66,8 @@ parse_args <- function(args) {
     stop("Unexpected argument: ", arg, "\n", usage())
   }
 
-  if (!mode %in% c("publish", "rollback")) {
-    stop("Mode must be 'publish' or 'rollback'.\n", usage())
+  if (!mode %in% c("publish", "publish-local", "rollback")) {
+    stop("Mode must be 'publish', 'publish-local', or 'rollback'.\n", usage())
   }
 
   version <- trimws(version)
@@ -109,6 +110,17 @@ execute_publish <- function(version, force = FALSE) {
   write_release_pointer(current_release_path, version)
 }
 
+execute_publish_local <- function(version, force = FALSE) {
+  export_working_tree_snapshot(
+    repo_dir = repo_dir,
+    target_dir = file.path(releases_dir, version),
+    overwrite = force
+  )
+
+  run_release_smoke_check(file.path(releases_dir, version), config_path)
+  write_release_pointer(current_release_path, version)
+}
+
 execute_rollback <- function(version) {
   release_dir <- file.path(releases_dir, version)
 
@@ -122,6 +134,8 @@ execute_rollback <- function(version) {
 result <- tryCatch({
   if (identical(settings$mode, "publish")) {
     execute_publish(settings$version, force = settings$force)
+  } else if (identical(settings$mode, "publish-local")) {
+    execute_publish_local(settings$version, force = settings$force)
   } else {
     execute_rollback(settings$version)
   }

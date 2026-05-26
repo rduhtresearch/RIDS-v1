@@ -2,13 +2,12 @@
 
 ## Overview
 
-RIDS now uses a lightweight CI/CD process designed for a small team:
+RIDS now uses a lightweight manual release process designed for a small team:
 
 - GitHub is the source of truth for code.
-- GitHub Actions runs checks automatically on `main` and pull requests.
 - The live app uses versioned folders under `releases/`.
 - Shared runtime state lives under `shared/`.
-- A maintainer publishes or rolls back a version with one R script.
+- A maintainer runs checks locally, then publishes or rolls back a version with one R script.
 
 Users still launch the app the same way: by opening `deployment/Launch RIDS.bat`.
 
@@ -91,33 +90,24 @@ Use this flow for normal code changes.
 
 1. Create a short-lived branch from `main`.
 2. Make your changes.
-3. Push the branch to GitHub.
-4. Open a pull request into `main`.
-5. Wait for GitHub Actions to run.
-6. Look for the green tick.
-7. If checks pass, merge into `main`.
+3. Run the local checks from the repo root:
 
-You do not need to manually run GitHub Actions. GitHub runs them for you automatically.
+```bash
+Rscript R/CI/run_ci_checks.R
+```
 
-## What GitHub Actions Does
+4. If checks pass, push the branch to GitHub.
+5. Open a pull request into `main`.
+6. Review and merge when ready.
 
-There are two workflows in this repo:
+## Optional GitHub Actions
 
-- `CI`: runs on pull requests and pushes to `main`
-- `Release Artifact`: runs when you push a tag like `v0.5.0`
+The repo still includes GitHub Actions workflows, but they are manual-only for now.
 
-The CI workflow:
+- `CI`: can be run manually from GitHub if you want a clean remote check
+- `Release Artifact`: can be run manually later if you want a packaged GitHub artifact
 
-1. Installs R.
-2. Installs required R packages.
-3. Runs the custom tests in `R/tests`.
-4. Runs a lightweight bootstrap check to catch missing files or broken config loading.
-
-The release workflow:
-
-1. Re-runs the same checks for the tagged version.
-2. Builds a `.zip` artifact from the exact Git tag.
-3. Uploads that artifact to GitHub.
+They are not part of the required release path.
 
 ## Maintainer Release Process
 
@@ -135,22 +125,42 @@ git checkout main
 git pull origin main
 ```
 
-### 2. Create the release tag
+### 2. Run checks locally
+
+From the repo root:
+
+```bash
+Rscript R/CI/run_ci_checks.R
+```
+
+Do not publish if this command fails.
+
+### 3. Publish the release
+
+You now have two supported paths.
+
+#### Option A: Publish the current working tree
+
+Use this when you want the simplest possible shared-drive release and do not need a Git tag yet.
+
+```bash
+Rscript R/SETUP/release_publish.R publish-local --version v0.5.0
+```
+
+What this does:
+
+1. Copies the current working tree into `releases/v0.5.0/`.
+2. Runs a lightweight smoke check.
+3. Updates `shared/current_release.txt`.
+4. Writes a line to `shared/deploy_log.tsv`.
+
+#### Option B: Publish an exact Git tag
 
 Pick a new version name such as `v0.5.0`.
 
 ```bash
 git tag v0.5.0
 git push origin v0.5.0
-```
-
-This triggers the GitHub release workflow automatically.
-
-### 3. Publish the tag to the shared drive
-
-From the repo root on the maintainer machine that can access the shared drive, run:
-
-```bash
 Rscript R/SETUP/release_publish.R publish --version v0.5.0
 ```
 
@@ -204,6 +214,12 @@ This is enough for a first local/shared deployment on a new machine.
 Rscript R/SETUP/release_publish.R publish --version v0.5.0
 ```
 
+### Publish the current working tree
+
+```bash
+Rscript R/SETUP/release_publish.R publish-local --version v0.5.0
+```
+
 ### Rebuild an existing release folder
 
 ```bash
@@ -218,14 +234,13 @@ Rscript R/SETUP/release_publish.R rollback --version v0.4.1
 
 ## Troubleshooting
 
-### GitHub Actions failed
+### Local CI checks failed
 
-1. Open the failed workflow in GitHub.
-2. Read the failing step.
-3. Fix the branch locally.
-4. Push again and wait for a new green tick.
+1. Read the failing output from `Rscript R/CI/run_ci_checks.R`.
+2. Fix the code locally.
+3. Re-run the checks.
 
-Do not tag or publish a version while CI is red.
+Do not publish while local checks are failing.
 
 ### Tag not found during publish
 
@@ -243,6 +258,8 @@ If needed, create and push the tag:
 git tag v0.5.0
 git push origin v0.5.0
 ```
+
+If you do not need a tag yet, use `publish-local` instead.
 
 ### Shared drive unavailable
 
@@ -290,6 +307,6 @@ Check:
 ## Notes
 
 - `main` is the only permanent branch.
-- Each live deployment should map to a Git tag.
+- Each live deployment can map either to a Git tag or to a manually named working-tree snapshot.
 - Shared runtime folders should not be committed to Git.
-- This process is intentionally simple: GitHub checks code, and one R script promotes or rolls back versions.
+- This process is intentionally simple: local checks validate code, and one R script promotes or rolls back versions.
