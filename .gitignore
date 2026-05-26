@@ -5,6 +5,8 @@
 .Ruserdata
 config.R
 deployment/
+releases/
+shared/
 
 # OS
 .DS_Store

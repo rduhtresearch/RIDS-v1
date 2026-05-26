@@ -53,7 +53,7 @@ ICT_UPLOAD_DIR <- APP_CONFIG$ict_upload_dir
 EDGE_OUTPUT_DIR <- APP_CONFIG$edge_output_dir
 APP_HOST <- APP_CONFIG$app_host
 APP_PORT <- APP_CONFIG$app_port
-APP_RUN_LOG_DIR <- file.path(getwd(), "logs")
+APP_RUN_LOG_DIR <- APP_CONFIG$app_log_dir
 APP_RUN_LOG_FILE <- initialize_app_run_logging(APP_RUN_LOG_DIR)
 
 app_log_info("startup", "Global initialization started")
@@ -89,8 +89,8 @@ onStop(function() {
 # ==============================================================================
 # Version consts
 # ==============================================================================
-APP_VERSION      <- "0.4.0"
-APP_LAST_UPDATED <- "2026-05-06"
+APP_VERSION <- trimws(Sys.getenv("RIDS_APP_VERSION", "0.4.0"))
+APP_LAST_UPDATED <- trimws(Sys.getenv("RIDS_APP_LAST_UPDATED", "2026-05-06"))
 AUTH_SESSION_HOURS <- suppressWarnings(as.numeric(Sys.getenv("RIDS_AUTH_SESSION_HOURS", "10")))
 if (is.na(AUTH_SESSION_HOURS) || AUTH_SESSION_HOURS <= 0) {
   AUTH_SESSION_HOURS <- 10
