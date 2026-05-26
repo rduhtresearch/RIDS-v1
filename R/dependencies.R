@@ -11,6 +11,7 @@ required_packages <- c(
   "reactable",
   "DT",
   "jsonlite",
+  "scales",
   "dplyr",
   "tidyr",
   "stringr",
