@@ -737,17 +737,9 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     }
 
     log_step4_event <- function(level, message, details = list()) {
-      log_event(
-        level = level,
-        area = "step4",
-        message = message,
-        user_id = auth_state$user_id,
-        username = auth_state$username,
-        cpms_id = shared_state$cpms_id,
-        upload_id = shared_state$upload_id,
-        session_id = auth_state$session_id,
-        details = details
-      )
+      if (identical(level, "INFO")) {
+        app_log_info("step4", message)
+      }
     }
     
     # ── Generate templates on load ────────────────────────────────────────────
@@ -764,7 +756,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
 
       log_step4_event(
         level = "INFO",
-        message = "Posting line generation started",
+        message = "Template generation started",
         details = list(scenario_id = shared_state$scenario_id)
       )
       
@@ -850,14 +842,9 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         dbAppendTable(CON, "posting_lines", adjusted)
         log_step4_event(
           level = "INFO",
-          message = "Posting line generation completed",
+          message = "Posting lines saved",
           details = list(rows = nrow(adjusted))
         )
-        app_log_info("step4", "Posting lines saved", list(
-          cpms_id = shared_state$cpms_id,
-          upload_id = shared_state$upload_id,
-          rows = nrow(adjusted)
-        ))
       }, error = function(e) {
         app_log_exception("step4", "Posting lines persistence failed", e, list(
           cpms_id = shared_state$cpms_id,
@@ -926,15 +913,6 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         )
         zp        <- file.path(EDGE_OUTPUT_DIR, zip_name)
 
-        log_step4_event(
-          level = "INFO",
-          message = "ZIP generation started",
-          details = list(
-            template_count = length(tmpl),
-            zip_name = zip_name
-          )
-        )
-        
         if (!dir.exists(EDGE_OUTPUT_DIR)) dir.create(EDGE_OUTPUT_DIR, recursive = TRUE)
         
         write_zip(tmpl, zp)
@@ -951,7 +929,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
 
         log_step4_event(
           level = "INFO",
-          message = "ZIP generation completed",
+          message = "ZIP save completed",
           details = list(
             template_count = length(tmpl),
             zip_name = zip_name
@@ -977,6 +955,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       })
       
       updateSelectInput(session, "arm_select", choices = names(tmpl))
+      app_log_info("step4", "Template generation completed")
       
       w$hide()
       showNotification("Templates generated successfully", type = "message", duration = 5)

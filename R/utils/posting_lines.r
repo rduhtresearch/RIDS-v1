@@ -495,50 +495,21 @@ generate_posting_plan <- function(ict,
                                   mff_rate    = 1.08,
                                   ict_db_path = NULL,
                                   output_path = NULL) {
-  
-  # 1. Read & validate ICT
-  message("--- Reading ICT data ---")
   df <- read_ict_workbook(ict)
-  
-  # 2. Normalise rows
-  message("--- Normalising row context ---")
   df <- normalise_rows(df, scenario_id, ruleset_id)
-  
-  # 3. Optional: join contract costs from ict_costing_tbl (corrected keys)
   if (!is.null(ict_db_path)) {
-    message("--- Joining ICT contract costs (corrected keys) ---")
     df <- join_ict_costs(df, ict_db_path)
   }
-  
-  # 4. Load finance rules from DB
-  message("--- Loading finance rules ---")
   rules <- load_rules(rules_db_path, ruleset_id)
-  
-  # 5. Match dist rules -> posting lines
-  message("--- Applying distribution rules ---")
   plan <- apply_dist_rules(df, rules$dist_rules, scenario_id)
-  
-  # 6. Calculate amounts
-  message("--- Calculating posting amounts ---")
   plan <- apply_amount_map(plan, rules$amount_map, mff_rate)
-  
-  # 7. Route to destinations
-  message("--- Resolving routing ---")
   plan <- apply_routing(plan, rules$routing_rules)
-  
-  # 8. Resolve entities
-  message("--- Resolving destination entities ---")
   plan <- resolve_entities(plan)
-  
-  # 9. Final output
   out <- select_output_cols(plan)
   
   if (!is.null(output_path)) {
     write_csv(out, output_path)
-    message("Wrote posting plan to: ", output_path)
   }
-  
-  message("--- Posting plan complete: ", nrow(out), " rows, scenario ", scenario_id, " ---")
   invisible(out)
 }
 
@@ -561,25 +532,11 @@ prepare_posting_input <- function(ict,
                                   scenario_id,
                                   ruleset_id  = "COMM_AH_V1",
                                   ict_db_path = NULL) {
-  
-  # 1. Read & validate ICT
-  app_log_info("posting", "Reading ICT data")
   df <- read_ict_workbook(ict)
-  
-  # 2. Normalise rows
-  app_log_info("posting", "Normalising row context", list(
-    scenario_id = scenario_id,
-    ruleset_id = ruleset_id
-  ))
   df <- normalise_rows(df, scenario_id, ruleset_id)
-  
-  # 3. Optional: join contract costs from ict_costing_tbl
   if (!is.null(ict_db_path)) {
-    app_log_info("posting", "Joining ICT contract costs")
     df <- join_ict_costs(df, ict_db_path)
   }
-  
-  app_log_info("posting", "Prepared posting input", list(rows = nrow(df)))
   df
 }
 
@@ -599,34 +556,16 @@ evaluate_posting_plan <- function(prepared_df,
   # calc_tag is already cleaned/handled in normalise_rows(),
   # and row_category is already set there too.
   
-  app_log_info("posting", "Loading finance rules", list(
-    scenario_id = scenario_id,
-    ruleset_id = ruleset_id
-  ))
   rules <- load_rules(rules_db_path, ruleset_id)
-  
-  app_log_info("posting", "Applying distribution rules")
   plan <- apply_dist_rules(prepared_df, rules$dist_rules, scenario_id)
-  
-  app_log_info("posting", "Calculating posting amounts")
   plan <- apply_amount_map(plan, rules$amount_map, mff_rate)
-  
-  app_log_info("posting", "Resolving routing")
   plan <- apply_routing(plan, rules$routing_rules)
-  
-  app_log_info("posting", "Resolving destination entities")
   plan <- resolve_entities(plan)
   
   out <- select_output_cols(plan)
   
   if (!is.null(output_path)) {
     write_csv(out, output_path)
-    app_log_info("posting", "Posting plan written", list(path = output_path))
   }
-  
-  app_log_info("posting", "Posting plan complete", list(
-    rows = nrow(out),
-    scenario_id = scenario_id
-  ))
   invisible(out)
 }

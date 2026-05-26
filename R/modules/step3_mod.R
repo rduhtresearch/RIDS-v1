@@ -163,13 +163,6 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
             row_count = length(selected_rows)
           )
         )
-        app_log_info("step3", "Scenario tag applied", list(
-          cpms_id = shared_state$cpms_id,
-          upload_id = shared_state$upload_id,
-          tag = input$tag_select,
-          rows = length(selected_rows)
-        ))
-        
         updateReactable("table", data = working_data$df)
       })
       
@@ -192,11 +185,7 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
           session_id = auth_state$session_id,
           details = list(rows = nrow(working_data$df))
         )
-        app_log_info("step3", "Posting evaluation started", list(
-          cpms_id = shared_state$cpms_id,
-          upload_id = shared_state$upload_id,
-          rows = nrow(working_data$df)
-        ))
+        app_log_info("step3", "Posting evaluation started")
         
         evaluated <- tryCatch({
           evaluate_posting_plan(
@@ -245,11 +234,7 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
           session_id = auth_state$session_id,
           details = list(rows = nrow(evaluated))
         )
-        app_log_info("step3", "Posting evaluation completed", list(
-          cpms_id = shared_state$cpms_id,
-          upload_id = shared_state$upload_id,
-          rows = nrow(evaluated)
-        ))
+        app_log_info("step3", "Posting evaluation completed")
         
         showNotification("Tags saved", type = "message", duration = 5)
       })

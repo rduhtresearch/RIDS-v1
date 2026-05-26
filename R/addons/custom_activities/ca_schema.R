@@ -57,7 +57,6 @@ ca_init_table <- function(con = CON) {
   addon_cols <- dbListFields(con, "addon_custom_activities")
   if (!"study_site" %in% addon_cols) {
     dbExecute(con, "ALTER TABLE addon_custom_activities ADD COLUMN study_site VARCHAR;")
-    message("addon_custom_activities.study_site column added")
   }
 
   # An index on the study identity plus custom_activity_id speeds up the
@@ -67,6 +66,5 @@ ca_init_table <- function(con = CON) {
       ON addon_custom_activities (cpms_id, study_site, scenario_id, custom_activity_id);
   ")
   
-  message("addon_custom_activities table initialised")
   invisible(TRUE)
 }

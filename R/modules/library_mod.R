@@ -179,11 +179,6 @@ libraryServer <- function(id, auth_state, shared_state) {
       req(selected_study())
       row <- selected_study()
       
-      message(
-        "Library click — setting current study to: ",
-        row$cpms_id, " / ", row$study_site, " / ", row$scenario_id
-      )
-      
       shared_state$current_study <- build_study_ref(row)
       shinyjs::runjs('$("a[data-value=\'tab_study\']").trigger("click")')
       

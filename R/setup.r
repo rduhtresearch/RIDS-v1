@@ -12,10 +12,8 @@ source("R/addons/custom_activities/ca_ref_activities.R", local = FALSE)
 
 ## Init database ---------------------------------------------------------------
 init_db <- function() {
-  cat("=== DB MAIN ===\n")
   tryCatch({
     dbGetQuery(CON, "SELECT 1")
-    message("DB CONNECTION OK")
   }, error = function(e) {
     stop("DB ERROR: ", e$message)
   })
@@ -72,17 +70,14 @@ meta_table <- function() {
   meta_cols <- dbListFields(CON, "meta_data")
   if (!"speciality_id" %in% meta_cols) {
     dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN speciality_id INTEGER;")
-    message("meta_data.speciality_id column added")
   }
 
   if (!"study_site" %in% meta_cols) {
     dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN study_site VARCHAR;")
-    message("meta_data.study_site column added")
   }
   
   if (!"edge_zip_path" %in% meta_cols) {
     dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN edge_zip_path VARCHAR;")
-    message("meta_data.edge_zip_path column added")
   }
 
   dbExecute(CON, "
@@ -117,10 +112,7 @@ meta_table <- function() {
         strpos(edge_zip_path, chr(0)) > 0;
     ")
   }, error = function(e) {
-    message("meta_data null-byte cleanup skipped: ", e$message)
   })
-  
-  message('meta built')
 }
 ## User tables -----------------------------------------------------------------
 user_tables <- function() {
@@ -152,7 +144,6 @@ user_tables <- function() {
       dbExecute(CON, "DROP SEQUENCE IF EXISTS auth_audit_id_seq;")
       dbExecute(CON, "DROP SEQUENCE IF EXISTS auth_session_id_seq;")
       dbExecute(CON, "DROP SEQUENCE IF EXISTS user_id_seq;")
-      message("Existing pre-live auth schema reset")
     }
 
     dbExecute(CON, "CREATE SEQUENCE IF NOT EXISTS user_id_seq;")
@@ -201,8 +192,6 @@ user_tables <- function() {
         session_id     INTEGER
       );
     ")
-
-    message("User tables initialised")
   }, error = function(e) {
     stop("Failed to initialise user tables: ", e$message)
   })
@@ -210,13 +199,10 @@ user_tables <- function() {
 
 ## Populate user tables --------------------------------------------------------
 seed_users <- function() {
-  message("Auth user seeding disabled for pre-live bootstrap flow.")
 }
 
 ## Rules tables ----------------------------------------------------------------
 build_rules_tables <- function() {
-  cat("=== DB RULES ===\n")
-  
   # 4) Helper to run SQL quickly
   exec_sql <- function(sql) dbExecute(CON, sql)
 
@@ -297,7 +283,6 @@ build_rules_tables <- function() {
   
   # 6) Seed base reference data (only on first run)
   if (dbGetQuery(CON, "SELECT COUNT(*) AS n FROM rulesets")$n > 0) {
-    message("Rules tables already seeded — skipping")
     return(invisible(NULL))
   }
 
@@ -475,20 +460,9 @@ build_rules_tables <- function() {
     insert_routing(paste0(sc, "_R_I25P"), sc, "INDIRECT_25_PI", "DEST_PROVIDER", 10)
   }
   
-  # 11) Audit summary
-  cat("Built and seeded DB:", DB_DIR, "\n")
-  cat("\nPosting line types:\n")
-  print(dbGetQuery(CON, "SELECT * FROM posting_line_types ORDER BY posting_line_type_id;"))
-  
-  cat("\nDist rules count by scenario/category:\n")
-  print(dbGetQuery(CON, "SELECT scenario_id, row_category, COUNT(*) AS n FROM dist_rules GROUP BY scenario_id, row_category ORDER BY scenario_id, row_category;"))
-  
-  cat("\nRouting rules count by scenario:\n")
-  print(dbGetQuery(CON, "SELECT scenario_id, COUNT(*) AS n FROM routing_rules GROUP BY scenario_id ORDER BY scenario_id;"))
 }
 
 bootstrap_admin <- function() {
-  message("Admin bootstrap is handled in-app on first login.")
 }
 
 # Admin settings tables --------------------------------------------------------
@@ -526,7 +500,6 @@ settings_table <- function() {
     )
   }
   
-  message("Settings table initialised")
 }
 
 app_logs_table <- function() {
@@ -598,8 +571,6 @@ app_logs_table <- function() {
     dbExecute(CON, "CREATE INDEX IF NOT EXISTS idx_app_logs_area_timestamp ON app_logs (area, timestamp);")
     dbExecute(CON, "CREATE INDEX IF NOT EXISTS idx_app_logs_cpms_upload ON app_logs (cpms_id, upload_id);")
   }
-
-  message("Application logs table initialised")
 }
 
 # Specialities lookup ----------------------------------------------------------
@@ -631,9 +602,6 @@ specialities_table <- function() {
                 params = list(nm)
       )
     }
-    message("Specialities table seeded with ", length(seed), " entries")
-  } else {
-    message("Specialities table already populated — skipping seed")
   }
 }
 
@@ -679,7 +647,6 @@ posting_lines_table <- function() {
   posting_cols <- dbListFields(CON, "posting_lines")
   if (!"study_site" %in% posting_cols) {
     dbExecute(CON, "ALTER TABLE posting_lines ADD COLUMN study_site VARCHAR;")
-    message("posting_lines.study_site column added")
   }
 }
 

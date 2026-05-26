@@ -119,12 +119,7 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
           speciality_id = as.integer(input$speciality_id)
         )
       )
-      app_log_info("step1", "Upload started", list(
-        scenario_id = input$scenario,
-        study_site = input$study_site,
-        edge_id = input$edge_id,
-        filename = input$upload$name
-      ))
+      app_log_info("step1", "Upload started")
       
       ###
       # ── Validation ────────────────────────────────────────────────────────
@@ -151,11 +146,6 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
             validation_findings = head(as.character(validation$findings %||% character()), 10)
           )
         )
-        app_log_warn("step1", "Upload validation failed", list(
-          edge_id = input$edge_id,
-          filename = input$upload$name
-        ))
-
         showModal(modalDialog(
           title = "ICT workbook validation failed",
           size  = "m",
@@ -197,10 +187,7 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
           original_filename = original_name
         )
       )
-      app_log_info("step1", "Upload processing started", list(
-        edge_id = input$edge_id,
-        filename = original_name
-      ))
+      app_log_info("step1", "Workbook processing started")
 
       copy_ok <- tryCatch({
         file.copy(input$upload$datapath, saved_path, overwrite = TRUE)
@@ -431,10 +418,7 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
           speciality_id = sp_id
         )
       )
-      app_log_info("step1", "Upload completed", list(
-        cpms_id = extracted_cpms,
-        upload_id = upload_id
-      ))
+      app_log_info("step1", "Upload completed")
       
       # ── Navigate ─────────────────────────────────────────────────────────
       current_step("step2")

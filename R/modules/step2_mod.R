@@ -161,11 +161,7 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
         session_id = auth_state$session_id,
         details = list(rows = nrow(working_data$df))
       )
-      app_log_info("step2", "Step 2 save started", list(
-        cpms_id = shared_state$cpms_id,
-        upload_id = shared_state$upload_id,
-        rows = nrow(working_data$df)
-      ))
+      app_log_info("step2", "Save started")
       
       tryCatch({
         dbExecute(CON,
@@ -185,11 +181,7 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
           session_id = auth_state$session_id,
           details = list(rows = nrow(working_data$df))
         )
-        app_log_info("step2", "Step 2 save completed", list(
-          cpms_id = shared_state$cpms_id,
-          upload_id = shared_state$upload_id,
-          rows = nrow(working_data$df)
-        ))
+        app_log_info("step2", "Save completed")
 
         showNotification("Saved successfully", type = "message", duration = 5)
       }, error = function(e) {

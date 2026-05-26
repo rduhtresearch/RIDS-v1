@@ -67,12 +67,8 @@ apply_custom_activities <- function(pipeline_rows, shared_state, con = CON) {
   # Pipeline output unchanged when nothing's been added — gives the addon
   # the "byte-identical to no-addon" property.
   if (nrow(customs) == 0) {
-    message("apply_custom_activities(): no custom activities for cpms_id ", cpms_id)
     return(pipeline_rows)
   }
-  
-  message("apply_custom_activities(): merging ", n_distinct(customs$custom_activity_id),
-          " custom activity / activities (", nrow(customs), " slot rows)")
   
   # ── 3. Mint edge keys (one per activity, shared across its slots) ─────────
   customs_keyed <- ca_assign_edge_keys(customs)

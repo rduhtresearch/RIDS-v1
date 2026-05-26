@@ -60,7 +60,7 @@ app_log_info("startup", "Global initialization started")
 
 # Connect to database
 CON <- connect_primary_database(APP_CONFIG)
-app_log_info("startup", "Primary database connected", list(storage_mode = STORAGE_MODE))
+app_log_info("startup", "Primary database connected")
 
 # Load paths from DB settings (admin may have updated them); fall back to config values
 ICT_UPLOAD_DIR_DEFAULT <- ICT_UPLOAD_DIR

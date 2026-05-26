@@ -65,7 +65,6 @@ ca_init_ref_activities <- function(con = CON) {
                  ON CONFLICT (name) DO NOTHING",
                 params = list(nm))
     }
-    message("ref_custom_activities seeded with ", length(.CA_REF_ACTIVITIES_SEED), " entries")
   } else {
     # Even after first seed, top up any NEW entries that have been added to the
     # seed vector since last startup. ON CONFLICT means no-op for existing.
@@ -75,7 +74,6 @@ ca_init_ref_activities <- function(con = CON) {
                  ON CONFLICT (name) DO NOTHING",
                 params = list(nm))
     }
-    message("ref_custom_activities exists — topping up any new seed entries")
   }
   
   invisible(TRUE)

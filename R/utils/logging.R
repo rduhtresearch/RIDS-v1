@@ -25,26 +25,16 @@ format_log_context <- function(context = list()) {
 }
 
 app_log_line <- function(level = "INFO", area = "app", text, context = list()) {
-  level <- toupper(trimws(as.character(level %||% "INFO")))
   area <- trimws(as.character(area %||% "app"))
   text <- trimws(as.character(text %||% ""))
   context_text <- format_log_context(context)
-
-  line <- paste(
-    format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"),
-    "|",
-    sprintf("%-5s", level),
-    "|",
-    sprintf("%-12s", area),
-    "|",
-    text
-  )
+  line <- paste0(area, ": ", text)
 
   if (nzchar(context_text)) {
-    line <- paste(line, "|", context_text)
+    line <- paste0(line, " | ", context_text)
   }
 
-  message(line)
+  cat(line, "\n", sep = "", file = stdout())
   invisible(line)
 }
 
@@ -86,8 +76,7 @@ initialize_app_run_logging <- function(log_dir = file.path(getwd(), "logs")) {
     app_run_log_state$message_connection <- con
 
     sink(con, split = TRUE)
-    sink(con, type = "message")
-    app_log_info("startup", "RIDS app run started", list(pid = Sys.getpid()))
+    app_log_info("startup", "App run started")
 
     invisible(log_path)
   }, error = function(e) {
@@ -101,11 +90,7 @@ close_app_run_logging <- function() {
     con <- app_run_log_state$output_connection %||% NULL
 
     if (!is.null(con) && isOpen(con)) {
-      app_log_info("shutdown", "RIDS app run ended", list(pid = Sys.getpid()))
-    }
-
-    if (sink.number(type = "message") > 0) {
-      sink(type = "message")
+      app_log_info("shutdown", "App run ended")
     }
 
     if (sink.number() > 0) {
