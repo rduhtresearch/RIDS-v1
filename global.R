@@ -82,7 +82,7 @@ db_main()
 # ==============================================================================
 onStop(function() {
   app_log_info("shutdown", "Closing primary database")
-  dbDisconnect(CON, shutdown = TRUE)
+  close_duckdb_connection(CON)
   close_app_run_logging()
 })
 

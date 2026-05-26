@@ -144,8 +144,8 @@ db_already_exists <- file.exists(DB_DIR)
 source("R/utils/auth.r")
 source("R/setup.r")
 
-CON <- dbConnect(duckdb(), DB_DIR)
-on.exit(try(dbDisconnect(CON, shutdown = TRUE), silent = TRUE), add = TRUE)
+CON <- open_duckdb_connection(DB_DIR)
+on.exit(try(close_duckdb_connection(CON), silent = TRUE), add = TRUE)
 
 db_main()
 upsert_setting(CON, "ict_upload_dir", config$ict_upload_dir)

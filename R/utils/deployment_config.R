@@ -95,7 +95,32 @@ connect_primary_database <- function(config) {
     stop("Only DuckDB is supported in this release. Config requested: ", config$storage_mode)
   }
 
-  dbConnect(duckdb(), config$db_dir)
+  open_duckdb_connection(config$db_dir)
+}
+
+open_duckdb_connection <- function(db_dir, read_only = FALSE, config = list()) {
+  # Keep a stable reference to the driver object for older DuckDB R package
+  # builds that can invalidate connections when the anonymous driver is GC'd.
+  drv <- duckdb::duckdb(
+    dbdir = db_dir,
+    read_only = read_only,
+    config = config
+  )
+  con <- DBI::dbConnect(drv)
+  attr(con, "duckdb_driver") <- drv
+  con
+}
+
+close_duckdb_connection <- function(con) {
+  drv <- attr(con, "duckdb_driver", exact = TRUE)
+
+  try(DBI::dbDisconnect(con, shutdown = TRUE), silent = TRUE)
+
+  if (!is.null(drv)) {
+    try(duckdb::duckdb_shutdown(drv), silent = TRUE)
+  }
+
+  invisible(TRUE)
 }
 
 write_deployment_config <- function(path, config) {
