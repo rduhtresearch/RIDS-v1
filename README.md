@@ -10,6 +10,7 @@ RIDS currently uses a lightweight manual deployment process.
 - Maintainers run local R checks, pull the latest code into the shared-drive clone, and publish a named release with one R script.
 
 Users still launch the app by opening `deployment/Launch RIDS.bat`.
+Maintainers should run `deployment/Prepare RIDS.bat` once on each Windows laptop before daily use.
 
 ## Shared Drive Layout
 
@@ -19,7 +20,9 @@ After setup, the shared deployment folder looks like this:
 RIDS-v1/
 ├── app source files
 ├── deployment/
+│   ├── Prepare RIDS.bat
 │   ├── Launch RIDS.bat
+│   ├── prepare_app.R
 │   └── launch_app.R
 ├── releases/
 │   ├── v0.5.0/
@@ -67,7 +70,7 @@ What setup does:
 1. Installs missing R packages.
 2. Creates `releases/`, `shared/`, and `deployment/`.
 3. Creates `shared/deployment_config.R`.
-4. Creates `deployment/Launch RIDS.bat`.
+4. Creates `deployment/Prepare RIDS.bat` and `deployment/Launch RIDS.bat`.
 5. Creates the shared DuckDB database if needed.
 6. Bootstraps the first live release automatically.
 
@@ -98,10 +101,11 @@ For the step-by-step operator runbook, see [DEPLOYMENT.md](/Users/tategraham/Doc
 
 Normal users only need these steps:
 
-1. Open `deployment/Launch RIDS.bat`.
-2. Wait a few seconds.
-3. Let the browser open automatically.
-4. Sign in.
+1. Make sure a maintainer has already run `deployment/Prepare RIDS.bat` on that laptop.
+2. Open `deployment/Launch RIDS.bat`.
+3. Wait a few seconds.
+4. Let the browser open automatically.
+5. Sign in.
 
 ## Operator Reference Commands
 
@@ -121,6 +125,12 @@ Rscript R/CI/run_ci_checks.R
 
 ```bash
 Rscript R/SETUP/release_publish.R publish-local --version v0.5.0
+```
+
+### Prepare a Windows laptop for first use
+
+```text
+deployment/Prepare RIDS.bat
 ```
 
 ### Rebuild an existing release folder
