@@ -7,7 +7,7 @@
 # 1. Installs any missing R packages
 # 2. Creates the shared runtime and releases folders if needed
 # 3. Creates or updates the shared deployment config
-# 4. Creates the central Windows launcher
+# 4. Creates the central Windows launcher and preparation scripts
 # 5. Initialises the central DuckDB database if needed
 # 6. Bootstraps the first active release automatically
 # ==============================================================================
@@ -83,7 +83,9 @@ deployment_config_path <- file.path(SHARED_DIR, "deployment_config.R")
 current_release_path <- file.path(SHARED_DIR, "current_release.txt")
 deploy_log_path <- file.path(SHARED_DIR, "deploy_log.tsv")
 launcher_r_path <- file.path(DEPLOYMENT_DIR, "launch_app.R")
+prep_r_path <- file.path(DEPLOYMENT_DIR, "prepare_app.R")
 launcher_bat_path <- file.path(DEPLOYMENT_DIR, "Launch RIDS.bat")
+prepare_bat_path <- file.path(DEPLOYMENT_DIR, "Prepare RIDS.bat")
 
 dir.create(DEPLOYMENT_DIR, recursive = TRUE, showWarnings = FALSE)
 dir.create(RELEASES_DIR, recursive = TRUE, showWarnings = FALSE)
@@ -124,14 +126,24 @@ write_launcher_r_script(
   app_host = APP_HOST,
   app_port = APP_PORT
 )
+write_prepare_r_script(
+  path = prep_r_path,
+  releases_dir = RELEASES_DIR,
+  current_release_path = current_release_path
+)
 write_launcher_bat(
   path = launcher_bat_path,
   launcher_r_path = launcher_r_path,
   app_port = APP_PORT
 )
+write_prepare_bat(
+  path = prepare_bat_path,
+  prep_r_path = prep_r_path
+)
 
 message("Deployment config written: ", deployment_config_path)
 message("Launcher created: ", launcher_bat_path)
+message("Preparation launcher created: ", prepare_bat_path)
 
 # ------------------------------------------------------------------------------
 # 5. Initialise or refresh the central database safely
@@ -249,4 +261,5 @@ message("Next steps:")
 message("1. Open: ", launcher_bat_path)
 message("2. Wait for the browser to open.")
 message("3. On first launch, create the first admin account in the app.")
-message("4. Later, tag and publish a formal release with R/SETUP/release_publish.R if needed.")
+message("4. On each Windows laptop, run deployment/Prepare RIDS.bat once before daily use.")
+message("5. Later, tag and publish a formal release with R/SETUP/release_publish.R if needed.")

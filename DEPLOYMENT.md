@@ -58,19 +58,22 @@ In `R` or `RStudio`:
 source("R/SETUP/new_setup.R")
 ```
 
-### 3. Install repo dependencies if needed
+### 3. Prepare the Windows laptop for first use
 
-If the machine is missing required R packages:
+Run the preparation launcher once on each Windows laptop:
 
-```powershell
-& "C:\Program Files\R\R-4.5.1\bin\Rscript.exe" -e "source('R/dependencies.R')"
+```text
+deployment\Prepare RIDS.bat
 ```
 
-If `Rscript` is already on your `PATH`, you can use:
+What it does:
 
-```powershell
-Rscript -e "source('R/dependencies.R')"
-```
+1. Finds `Rscript.exe`
+2. Locates the active release
+3. Creates or reuses the user R library
+4. Installs missing packages from the active release's `R/dependencies.R`
+
+The first run can take several minutes.
 
 ## Standard Update Flow
 
@@ -145,12 +148,28 @@ What this does:
 3. Updates `shared/current_release.txt`
 4. Writes a line to `shared/deploy_log.tsv`
 
-### 5. Verify the release
+### 5. Prepare the laptop if this release adds new packages
+
+If the release introduces new R package dependencies, rerun:
+
+```text
+deployment\Prepare RIDS.bat
+```
+
+This is also a good support step on any new Windows laptop before the user launches the app.
+
+### 6. Verify the release
 
 Check the active release pointer:
 
 ```powershell
 Get-Content "shared\current_release.txt"
+```
+
+If needed, prepare the machine first:
+
+```text
+deployment\Prepare RIDS.bat
 ```
 
 Then launch:
@@ -205,9 +224,10 @@ What rollback does:
 
 After rollback:
 
-1. Open `deployment/Launch RIDS.bat`
-2. Confirm the previous version is now live
-3. Confirm the issue is no longer present
+1. If the older release has different package requirements, run `deployment\Prepare RIDS.bat`
+2. Open `deployment/Launch RIDS.bat`
+3. Confirm the previous version is now live
+4. Confirm the issue is no longer present
 
 ## Troubleshooting
 
@@ -224,13 +244,13 @@ git status
 
 ### `there is no package called '...'`
 
-Install repo dependencies on that machine:
+Run the Windows preparation launcher:
 
-```powershell
-& "C:\Program Files\R\R-4.5.1\bin\Rscript.exe" -e "source('R/dependencies.R')"
+```text
+deployment\Prepare RIDS.bat
 ```
 
-Then retry the command.
+Then retry `deployment\Launch RIDS.bat`.
 
 ### `Release folder already exists and is not empty`
 
@@ -252,6 +272,16 @@ Make sure:
 - the drive is connected
 - you are working inside the shared-drive repo clone
 - the repo still contains `shared/`, `releases/`, and `deployment/`
+
+### `RIDS did not respond on time`
+
+Check:
+
+1. whether `deployment\Prepare RIDS.bat` has been run on that laptop
+2. whether the app eventually started anyway
+3. `deployment\launch_rids.log` for startup details
+
+If the laptop has never been prepared, run `deployment\Prepare RIDS.bat` first, then retry the normal launcher.
 
 ### Release smoke check failed
 
