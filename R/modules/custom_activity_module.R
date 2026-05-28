@@ -58,6 +58,60 @@ suppressPackageStartupMessages({
   }
 }
 
+.ca_as_scalar_num <- function(x) {
+  if (is.null(x) || length(x) == 0L) return(NA_real_)
+  if (is.character(x)) {
+    x <- trimws(x[[1L]])
+    if (!nzchar(x)) return(NA_real_)
+  }
+  v <- suppressWarnings(as.numeric(x[[1L]]))
+  if (length(v) != 1L) return(NA_real_)
+  v
+}
+
+.ca_is_blank <- function(x) {
+  is.null(x) || length(x) == 0L || !nzchar(trimws(as.character(x[[1L]]) %||% ""))
+}
+
+.ca_validate_modal_inputs <- function(input_list) {
+  errs <- list()
+
+  if (.ca_is_blank(input_list$modal_arm))      errs$modal_arm      <- "Required"
+  if (.ca_is_blank(input_list$modal_activity)) errs$modal_activity <- "Required"
+
+  mode <- input_list$modal_mode %||% .CA_MODE_LEFT_VALUE
+
+  if (identical(mode, .CA_MODE_LEFT_VALUE)) {
+    if (.ca_is_blank(input_list$single_cc))
+      errs$single_cc <- "Required"
+
+    amt <- .ca_as_scalar_num(input_list$single_amt)
+    if (is.na(amt)) {
+      errs$single_amt <- "Required"
+    } else if (amt < 0) {
+      errs$single_amt <- "Must be >= 0"
+    }
+
+  } else if (identical(mode, .CA_MODE_RIGHT_VALUE)) {
+    for (i in seq_len(.CA_BASELINE_SLOTS)) {
+      cc_id  <- paste0("base_cc_",  i)
+      amt_id <- paste0("base_amt_", i)
+
+      if (.ca_is_blank(input_list[[cc_id]]))
+        errs[[cc_id]] <- "Required"
+
+      amt <- .ca_as_scalar_num(input_list[[amt_id]])
+      if (is.na(amt)) {
+        errs[[amt_id]] <- "Required"
+      } else if (amt < 0) {
+        errs[[amt_id]] <- "Must be >= 0"
+      }
+    }
+  }
+
+  errs
+}
+
 .ca_summarise_for_panel <- function(customs) {
   if (nrow(customs) == 0) {
     return(tibble(
@@ -563,58 +617,8 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
     })
     
     # ── Validation ──────────────────────────────────────────────────────────
-    .as_scalar_num <- function(x) {
-      if (is.null(x) || length(x) == 0L) return(NA_real_)
-      if (is.character(x)) {
-        x <- trimws(x[[1L]])
-        if (!nzchar(x)) return(NA_real_)
-      }
-      v <- suppressWarnings(as.numeric(x[[1L]]))
-      if (length(v) != 1L) return(NA_real_)
-      v
-    }
-    
-    .is_blank <- function(x) {
-      is.null(x) || length(x) == 0L || !nzchar(trimws(as.character(x[[1L]]) %||% ""))
-    }
-    
     .validate_modal <- reactive({
-      errs <- list()
-      
-      if (.is_blank(input$modal_arm))      errs$modal_arm      <- "Required"
-      if (.is_blank(input$modal_activity)) errs$modal_activity <- "Required"
-      
-      mode <- input$modal_mode %||% .CA_MODE_LEFT_VALUE
-      
-      if (identical(mode, .CA_MODE_LEFT_VALUE)) {
-        if (.is_blank(input$single_cc))
-          errs$single_cc <- "Required"
-        
-        amt <- .as_scalar_num(input$single_amt)
-        if (is.na(amt)) {
-          errs$single_amt <- "Required"
-        } else if (amt <= 0) {
-          errs$single_amt <- "Must be > 0"
-        }
-        
-      } else if (identical(mode, .CA_MODE_RIGHT_VALUE)) {
-        for (i in seq_len(.CA_BASELINE_SLOTS)) {
-          cc_id  <- paste0("base_cc_",  i)
-          amt_id <- paste0("base_amt_", i)
-          
-          if (.is_blank(input[[cc_id]]))
-            errs[[cc_id]] <- "Required"
-          
-          amt <- .as_scalar_num(input[[amt_id]])
-          if (is.na(amt)) {
-            errs[[amt_id]] <- "Required"
-          } else if (amt <= 0) {
-            errs[[amt_id]] <- "Must be > 0"
-          }
-        }
-      }
-      
-      errs
+      .ca_validate_modal_inputs(reactiveValuesToList(input))
     })
     
     .render_hint <- function(id_name, default_hint = NULL) {
@@ -650,7 +654,7 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
       rows_df <- if (identical(mode, .CA_MODE_LEFT_VALUE)) {
         tibble(
           cost_centre = trimws(as.character(input$single_cc)),
-          amount      = .as_scalar_num(input$single_amt)
+          amount      = .ca_as_scalar_num(input$single_amt)
         )
       } else {
         tibble(
@@ -658,7 +662,7 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
                                function(i) trimws(as.character(input[[paste0("base_cc_", i)]] %||% "")),
                                character(1)),
           amount      = vapply(seq_len(.CA_BASELINE_SLOTS),
-                               function(i) .as_scalar_num(input[[paste0("base_amt_", i)]]),
+                               function(i) .ca_as_scalar_num(input[[paste0("base_amt_", i)]]),
                                numeric(1))
         )
       }
