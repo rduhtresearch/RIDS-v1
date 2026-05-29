@@ -14,7 +14,7 @@
 #     Visit_Label   — the visit dimension (human-readable visit name)
 #     Activity_Name — the activity dimension (always the activity)
 #   and writing them into DuckDB's ict_costing_tbl with the schema:
-#     (CPMS_ID, Study, Visit_Number, Study_Arm, Visit_Label, Activity_Name, ICT_Cost)
+#     (CPMS_ID, study_site, scenario_id, Study, Visit_Number, Study_Arm, Visit_Label, Activity_Name, ICT_Cost)
 #
 # This script consumes Stage B output from pipeline_fixed.r (long format, one row per
 # activity-visit-occurrence) and generates a posting plan using DuckDB finance rules.
@@ -22,7 +22,7 @@
 # through the entire pipeline so downstream joins are always unambiguous.
 #
 # Optionally, it can join back to ict_costing_tbl to attach Contract_Cost using the
-# corrected composite key (CPMS_ID + Visit_Number + Study_Arm + Activity_Name) —
+# corrected composite key (CPMS_ID + study_site + scenario_id + Visit_Number + Study_Arm + Activity_Name) —
 # the key that the old system could never get right with the overloaded Visit_Name.
 #
 # What changed vs the linear posting_test.r:
@@ -215,7 +215,7 @@ load_rules <- function(db_path, ruleset_id) {
   )
 }
 
-#' Join ICT contract costs from ict_costing_tbl using the CORRECTED composite key.
+#' Join saved contract costs from ict_costing_tbl using the CORRECTED composite key.
 #'
 #' ── Why this exists ──
 #' The old system (join_testv10 -> import_refactor_v22) joined on `Visit_Name`
@@ -231,17 +231,18 @@ load_rules <- function(db_path, ruleset_id) {
 #'   Activity_Name = activity dimension (e.g. "Blood Test", "CT Scan")
 #'
 #' This function joins on the UNAMBIGUOUS key:
-#'   (cpms_id, Visit, Study_Arm, Activity) -> (CPMS_ID, Visit_Number, Study_Arm, Activity_Name)
+#'   (cpms_id, study_site, scenario_id, Visit, Study_Arm, Activity)
+#'   -> (CPMS_ID, study_site, scenario_id, Visit_Number, Study_Arm, Activity_Name)
 #'
 #' For MFF summary rows (Activity_Name IS NULL in the lookup), we fall back to
-#' visit-level: (CPMS_ID, Visit_Number, Study_Arm).
+#' visit-level: (CPMS_ID, study_site, scenario_id, Visit_Number, Study_Arm).
 #'
 #' @param df       Normalised posting dataframe.
 #' @param db_path  Path to the DuckDB containing ict_costing_tbl.
-#' @return df with `contract_cost` column attached.
+#' @return df with `contract_cost` column attached from saved Step 2 values.
 join_ict_costs <- function(df, db_path) {
   if (!file.exists(db_path)) {
-    warning("join_ict_costs(): DB not found: ", db_path, " -- skipping ICT join.")
+    warning("join_ict_costs(): DB not found: ", db_path, " -- skipping contract cost join.")
     df$contract_cost <- NA_real_
     return(df)
   }
@@ -256,7 +257,7 @@ join_ict_costs <- function(df, db_path) {
   }
   
   ict <- dbGetQuery(con, "
-    SELECT CPMS_ID, Visit_Number, Study_Arm, Activity_Name, ICT_Cost,
+    SELECT CPMS_ID, study_site, scenario_id, Visit_Number, Study_Arm, Activity_Name, Contract_Cost,
            activity_occurrence_id, staff_group
     FROM ict_costing_tbl
   ")
@@ -269,8 +270,10 @@ join_ict_costs <- function(df, db_path) {
   
   df <- df %>%
     left_join(
-      ict_activity %>% rename(contract_cost_activity = ICT_Cost),
+      ict_activity %>% rename(contract_cost_activity = Contract_Cost),
       by = c("cpms_id"     = "CPMS_ID",
+             "study_site"  = "study_site",
+             "scenario_id" = "scenario_id",
              "Visit"       = "Visit_Number",
              "Study_Arm"   = "Study_Arm",
              "Activity"    = "Activity_Name",
@@ -281,13 +284,15 @@ join_ict_costs <- function(df, db_path) {
   # MFF rows don't have activity_occurrence_id, so join on visit-level key only.
   ict_visit <- ict %>%
     filter(is.na(Activity_Name)) %>%
-    select(CPMS_ID, Visit_Number, Study_Arm, ICT_Cost) %>%
-    rename(contract_cost_visit = ICT_Cost)
+    select(CPMS_ID, study_site, scenario_id, Visit_Number, Study_Arm, Contract_Cost) %>%
+    rename(contract_cost_visit = Contract_Cost)
   
   df <- df %>%
     left_join(
       ict_visit,
       by = c("cpms_id"   = "CPMS_ID",
+             "study_site" = "study_site",
+             "scenario_id" = "scenario_id",
              "Visit"     = "Visit_Number",
              "Study_Arm" = "Study_Arm")
     )

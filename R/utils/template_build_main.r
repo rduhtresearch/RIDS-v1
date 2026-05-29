@@ -41,11 +41,11 @@ edge_cols <- c(
 # ── Cost adjustment ────────────────────────────────────────────────────────────
 
 # Core adjustment logic: scales posting lines so they sum to the Step 2 saved
-# contract cost (rounded or unrounded), with the rounding residual absorbed by
-# the DIRECT line.
+# contract cost exactly as saved, with the rounding residual absorbed by the
+# DIRECT line.
 adjust_postings <- function(df, group_vars) {
   df %>%
-    mutate(contract_price = round(contract_cost, 0)) %>%
+    mutate(contract_price = contract_cost) %>%
     group_by(across(all_of(group_vars))) %>%
     mutate(
       base_sum        = sum(posting_amount, na.rm = TRUE),

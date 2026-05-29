@@ -590,6 +590,16 @@ step4_UI <- function(id) {
       hr(),
       customActivityUI(ns("custom_activities"))
       # ──────────────────────────────────────────────────────────────────────
+    ),
+    shinyjs::hidden(
+      div(
+        id = ns("complete_overlay"),
+        build_loading_state_overlay(
+          title = "Study processed successfully",
+          subtitle = "Opening the study library...",
+          status = "success"
+        )
+      )
     )
   )
 }
@@ -855,8 +865,14 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         visit_lookup <- dbGetQuery(CON, "
                         SELECT DISTINCT Study, Study_Arm, Visit_Label, Visit_Number
                         FROM ict_costing_tbl
-                        WHERE Visit_Label IS NOT NULL
-                      ")
+                        WHERE CPMS_ID = ? AND study_site = ? AND scenario_id = ?
+                          AND Visit_Label IS NOT NULL
+                      ",
+                      params = list(
+                        as.character(shared_state$cpms_id),
+                        as.character(shared_state$study_site),
+                        as.character(shared_state$scenario_id)
+                      ))
         
         templates <- build_all_edge_templates(adjusted, visit_lookup, shared_state$upload_meta$edge_id)
         
@@ -1016,23 +1032,11 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     observeEvent(input$complete, {
       
       current_session <- session
-      
-      showModal(modalDialog(
-        title     = NULL,
-        footer    = NULL,
-        easyClose = FALSE,
-        size      = "s",
-        fade      = FALSE,
-        build_loading_state_overlay(
-          title = "Study processed successfully",
-          subtitle = "Opening the study library...",
-          status = "success"
-        )
-      ))
+      shinyjs::show("complete_overlay")
       
       later::later(function() {
         shiny::withReactiveDomain(current_session, {
-          removeModal()
+          shinyjs::hide("complete_overlay")
           templates(NULL)
           zip_path(NULL)
           reset_shared_state()

@@ -84,11 +84,16 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
       
       df <- DBI::dbGetQuery(
         CON,
-        "SELECT CPMS_ID, Study, Visit_Number, Study_Arm,
+        "SELECT CPMS_ID, study_site, scenario_id, Study, Visit_Number, Study_Arm,
          Visit_Label, Activity_Name, ICT_Cost, Contract_Cost,
          activity_occurrence_id, staff_group
-         FROM ict_costing_tbl WHERE CPMS_ID = ?",
-         params = list(as.character(shared_state$cpms_id))
+         FROM ict_costing_tbl
+         WHERE CPMS_ID = ? AND study_site = ? AND scenario_id = ?",
+         params = list(
+           as.character(shared_state$cpms_id),
+           as.character(shared_state$study_site),
+           as.character(shared_state$scenario_id)
+         )
       )
       
       working_data$df <- df
@@ -165,8 +170,15 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
       
       tryCatch({
         dbExecute(CON,
-                  "DELETE FROM ict_costing_tbl WHERE CPMS_ID = ?",
-                  params = list(as.character(shared_state$cpms_id))
+                  paste(
+                    "DELETE FROM ict_costing_tbl",
+                    "WHERE CPMS_ID = ? AND study_site = ? AND scenario_id = ?"
+                  ),
+                  params = list(
+                    as.character(shared_state$cpms_id),
+                    as.character(shared_state$study_site),
+                    as.character(shared_state$scenario_id)
+                  )
         )
         dbAppendTable(CON, "ict_costing_tbl", working_data$df)
 

@@ -1,15 +1,14 @@
 suppressPackageStartupMessages(library(dplyr))
 
-# Uses `contract_cost` exactly as saved in Step 2. If users bulk-fill with
-# rounding on, the saved values are whole pounds; if they turn rounding off,
-# the saved values retain pence and are adjusted as-is downstream.
+# Uses `contract_cost` exactly as saved in Step 2. Rounded mode saves whole
+# pounds; unrounded mode saves pence, and Step 4 uses those saved values as-is.
 adjust_posting_lines <- function(out) {
   
   .ADJUSTMENT_SPECIAL <- c("Unscheduled Activities", "Setup & Closedown")
   
   .adjust <- function(df, group_vars) {
     df %>%
-      mutate(contract_price = round(contract_cost, 0)) %>%
+      mutate(contract_price = contract_cost) %>%
       group_by(across(all_of(group_vars))) %>%
       mutate(
         base_sum        = sum(posting_amount, na.rm = TRUE),

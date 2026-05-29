@@ -24,6 +24,8 @@ ict_table <- function() {
   query <- c("
      CREATE TABLE IF NOT EXISTS ict_costing_tbl (
      CPMS_ID                VARCHAR,
+     study_site             VARCHAR,
+     scenario_id            VARCHAR,
      Study                  VARCHAR,
      Visit_Number           VARCHAR,
      Study_Arm              VARCHAR,
@@ -37,6 +39,14 @@ ict_table <- function() {
   )
   
   dbExecute(CON, query)
+
+  ict_cols <- dbListFields(CON, "ict_costing_tbl")
+  if (!"study_site" %in% ict_cols) {
+    dbExecute(CON, "ALTER TABLE ict_costing_tbl ADD COLUMN study_site VARCHAR;")
+  }
+  if (!"scenario_id" %in% ict_cols) {
+    dbExecute(CON, "ALTER TABLE ict_costing_tbl ADD COLUMN scenario_id VARCHAR;")
+  }
 }
 
 ## App data --------------------------------------------------------------------
