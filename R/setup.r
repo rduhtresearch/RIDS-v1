@@ -632,6 +632,8 @@ posting_lines_table <- function() {
       contract_cost        DOUBLE,
       Department           VARCHAR,
       Staff_Role           VARCHAR,
+      activity_type        VARCHAR,
+      time_required        VARCHAR,
       contract_price       DOUBLE,
       base_sum             DOUBLE,
       multiplier           DOUBLE,
@@ -647,6 +649,12 @@ posting_lines_table <- function() {
   posting_cols <- dbListFields(CON, "posting_lines")
   if (!"study_site" %in% posting_cols) {
     dbExecute(CON, "ALTER TABLE posting_lines ADD COLUMN study_site VARCHAR;")
+  }
+  if (!"activity_type" %in% posting_cols) {
+    dbExecute(CON, "ALTER TABLE posting_lines ADD COLUMN activity_type VARCHAR;")
+  }
+  if (!"time_required" %in% posting_cols) {
+    dbExecute(CON, "ALTER TABLE posting_lines ADD COLUMN time_required VARCHAR;")
   }
 }
 
