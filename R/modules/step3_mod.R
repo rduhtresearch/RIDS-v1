@@ -20,37 +20,9 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
     id,
     function(input, output, session) {
       
-      # loading animation
       w <- Waiter$new(
-        html = tagList(
-          div(
-            style = "display: flex; flex-direction: column; align-items: center; gap: 1.5rem;",
-            tags$style("
-        @keyframes spin-ring {
-          0%   { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        .green-ring {
-          width: 64px;
-          height: 64px;
-          border-radius: 50%;
-          border: 5px solid rgba(40, 167, 69, 0.2);
-          border-top-color: #28a745;
-          animation: spin-ring 0.9s linear infinite;
-        }
-      "),
-            div(class = "green-ring"),
-            div(
-              style = "color: #ffffff; font-size: 1rem; font-weight: 600; letter-spacing: 0.03em;",
-              "Running cost adjustment engine"
-            ),
-            div(
-              style = "color: rgba(255,255,255,0.5); font-size: 0.8rem;",
-              "This may take a moment..."
-            )
-          )
-        ),
-        color = "rgba(18, 34, 48, 0.92)"
+        html = build_loading_state_overlay("Running cost adjustment engine"),
+        color = "transparent"
       )
       
       # declare reactive val for data

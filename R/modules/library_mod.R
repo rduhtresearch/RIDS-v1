@@ -140,6 +140,22 @@ libraryServer <- function(id, auth_state, shared_state) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
+    fetch_studies <- function() {
+      DBI::dbGetQuery(
+        CON,
+        "SELECT
+           REPLACE(cpms_id, chr(0), '') AS cpms_id,
+           REPLACE(study_site, chr(0), '') AS study_site,
+           REPLACE(study_name, chr(0), '') AS study_name,
+           REPLACE(scenario_id, chr(0), '') AS scenario_id,
+           REPLACE(edge_id, chr(0), '') AS edge_id,
+           REPLACE(uploaded_by, chr(0), '') AS uploaded_by,
+           upload_timestamp
+         FROM meta_data
+         ORDER BY upload_timestamp DESC"
+      )
+    }
+
     build_study_ref <- function(row) {
       list(
         cpms_id = as.character(row$cpms_id),
@@ -147,32 +163,41 @@ libraryServer <- function(id, auth_state, shared_state) {
         scenario_id = as.character(row$scenario_id)
       )
     }
+
+    study_key <- function(cpms_id, study_site, scenario_id) {
+      paste(cpms_id, study_site, scenario_id, sep = "||")
+    }
+
+    studies <- reactive({
+      shared_state$library_refresh
+      data <- fetch_studies()
+
+      if (nrow(data) == 0) {
+        data$study_key <- character(0)
+        return(data)
+      }
+
+      data$study_key <- mapply(
+        study_key,
+        data$cpms_id,
+        data$study_site,
+        data$scenario_id,
+        USE.NAMES = FALSE
+      )
+      data
+    })
     
     # ── Track selected study ──────────────────────────────────────────────────
     selected_study <- reactiveVal(NULL)
     
-    # ── Wire card click handlers ──────────────────────────────────────────────
-    observe({
-      studies <- DBI::dbGetQuery(CON,
-                                 "SELECT
-            REPLACE(cpms_id, chr(0), '') AS cpms_id,
-            REPLACE(study_site, chr(0), '') AS study_site,
-            REPLACE(study_name, chr(0), '') AS study_name,
-            REPLACE(scenario_id, chr(0), '') AS scenario_id,
-            REPLACE(edge_id, chr(0), '') AS edge_id,
-            REPLACE(uploaded_by, chr(0), '') AS uploaded_by,
-            upload_timestamp
-         FROM meta_data
-         ORDER BY upload_timestamp DESC"
-      )
-      req(nrow(studies) > 0)
-      
-      lapply(seq_len(nrow(studies)), function(i) {
-        observeEvent(input[[paste0("view_study_", i)]], {
-          selected_study(studies[i, ])
-        }, ignoreInit = TRUE)
-      })
-    })
+    observeEvent(input$open_study, {
+      req(input$open_study)
+
+      row_idx <- match(input$open_study, studies()$study_key)
+      req(!is.na(row_idx))
+
+      selected_study(studies()[row_idx, , drop = FALSE])
+    }, ignoreInit = TRUE)
     
     # ── Open the selected study in the workspace ─────────────────────────────
     observeEvent(selected_study(), {
@@ -187,24 +212,26 @@ libraryServer <- function(id, auth_state, shared_state) {
     
     # ── Render cards ──────────────────────────────────────────────────────────
     output$study_cards <- renderUI({
-      studies <- DBI::dbGetQuery(CON,
-                                 "SELECT
-            REPLACE(cpms_id, chr(0), '') AS cpms_id,
-            REPLACE(study_site, chr(0), '') AS study_site,
-            REPLACE(study_name, chr(0), '') AS study_name,
-            REPLACE(scenario_id, chr(0), '') AS scenario_id,
-            REPLACE(edge_id, chr(0), '') AS edge_id,
-            REPLACE(uploaded_by, chr(0), '') AS uploaded_by,
-            upload_timestamp
-         FROM meta_data
-         ORDER BY upload_timestamp DESC"
-      )
-      req(nrow(studies) > 0)
+      data <- studies()
+
+      if (nrow(data) == 0) {
+        return(
+          div(
+            style = "padding: 1rem; color: #697786;",
+            "No studies are available in the library yet."
+          )
+        )
+      }
       
       div(
         style = "display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; padding: 1rem;",
-        lapply(seq_len(nrow(studies)), function(i) {
-          row <- studies[i, ]
+        lapply(seq_len(nrow(data)), function(i) {
+          row <- data[i, ]
+          open_key_json <- jsonlite::toJSON(
+            as.character(row$study_key),
+            auto_unbox = TRUE,
+            null = "null"
+          )
           
           div(
             class = "card",
@@ -248,10 +275,15 @@ libraryServer <- function(id, auth_state, shared_state) {
               div(
                 style = "border-top: 1px solid #f0f4f8; padding-top: 0.75rem;",
                 actionButton(
-                  inputId = ns(paste0("view_study_", i)),
+                  inputId = ns(paste0("open_study_", i)),
                   label   = tagList(icon("folder-open"), " Open"),
                   class   = "btn btn-sm btn-outline-primary",
-                  style   = "font-size: 0.8rem; font-weight: 600;"
+                  style   = "font-size: 0.8rem; font-weight: 600;",
+                  onclick = sprintf(
+                    "Shiny.setInputValue('%s', %s, {priority: 'event'})",
+                    ns("open_study"),
+                    open_key_json
+                  )
                 )
               )
             )

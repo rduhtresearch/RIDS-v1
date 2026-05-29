@@ -237,7 +237,7 @@ persist_ict_to_duckdb <- function(db_path, ict_cost_table) {
   
   # Reorder columns to match table schema exactly
   ict_cost_table <- ict_cost_table[, c(
-    "CPMS_ID", "Study", "Visit_Number", "Study_Arm", "Visit_Label",
+    "CPMS_ID", "study_site", "scenario_id", "Study", "Visit_Number", "Study_Arm", "Visit_Label",
     "Activity_Name", "ICT_Cost", "Contract_Cost", "activity_occurrence_id", "staff_group"
   )]
   
@@ -245,16 +245,19 @@ persist_ict_to_duckdb <- function(db_path, ict_cost_table) {
   
   DBI::dbExecute(con, "
     DELETE FROM ict_costing_tbl
-    WHERE CPMS_ID IN (SELECT DISTINCT CPMS_ID FROM stg_ict_costing_tbl)
+    WHERE (CPMS_ID, study_site, scenario_id) IN (
+      SELECT DISTINCT CPMS_ID, study_site, scenario_id
+      FROM stg_ict_costing_tbl
+    )
   ")
   
   DBI::dbExecute(con, "
     INSERT INTO ict_costing_tbl (
-      CPMS_ID, Study, Visit_Number, Study_Arm, Visit_Label,
+      CPMS_ID, study_site, scenario_id, Study, Visit_Number, Study_Arm, Visit_Label,
       Activity_Name, ICT_Cost, Contract_Cost, activity_occurrence_id, staff_group
     )
     SELECT
-      CPMS_ID, Study, Visit_Number, Study_Arm, Visit_Label,
+      CPMS_ID, study_site, scenario_id, Study, Visit_Number, Study_Arm, Visit_Label,
       Activity_Name, ICT_Cost, Contract_Cost, activity_occurrence_id, staff_group
     FROM stg_ict_costing_tbl
   ")
@@ -265,10 +268,13 @@ persist_ict_to_duckdb <- function(db_path, ict_cost_table) {
 
 # ── Stage A ───────────────────────────────────────────────────────────────────
 
-run_stage_a <- function(input_file, db_path = NULL) {
+run_stage_a <- function(input_file, db_path = NULL, study_site = NULL, scenario_id = NULL) {
   if (is.na(input_file) || !file.exists(input_file)) {
     stop("run_stage_a(): input file not found: ", input_file)
   }
+  
+  study_site <- if (is.null(study_site)) NA_character_ else as.character(study_site)
+  scenario_id <- if (is.null(scenario_id)) NA_character_ else as.character(scenario_id)
   
   sheet_names <- getSheetNames(input_file)
   
@@ -316,7 +322,11 @@ run_stage_a <- function(input_file, db_path = NULL) {
   }
   
   if (!is.null(db_path)) {
-    if (nrow(ict_cost_table) > 0) persist_ict_to_duckdb(db_path, ict_cost_table)
+    if (nrow(ict_cost_table) > 0) {
+      ict_cost_table$study_site <- study_site
+      ict_cost_table$scenario_id <- scenario_id
+      persist_ict_to_duckdb(db_path, ict_cost_table)
+    }
   }
   
   list(
@@ -454,7 +464,8 @@ run_stage_b <- function(df) {
 #' @param export_path  Optional. If provided, writes the final long-format output here.
 #' @param db_path      Optional. Full path to RIDS.duckdb (e.g. "~/nhs_finance_app_data/RIDS.duckdb").
 #' @return             Named list of long-format dataframes (one per sheet), invisibly.
-process_workbook <- function(input_path, archive_dir = NULL, export_path = NULL, db_path = NULL) {
+process_workbook <- function(input_path, archive_dir = NULL, export_path = NULL, db_path = NULL,
+                             study_site = NULL, scenario_id = NULL) {
   
   if (missing(input_path) || !nzchar(input_path)) stop("process_workbook(): input_path is required.")
   if (!file.exists(input_path)) stop("process_workbook(): file not found: ", input_path)
@@ -466,7 +477,12 @@ process_workbook <- function(input_path, archive_dir = NULL, export_path = NULL,
   }
   
   app_log_info("pipeline", "Workbook processing started")
-  stage_a_result <- run_stage_a(input_file = input_path, db_path = db_path)
+  stage_a_result <- run_stage_a(
+    input_file = input_path,
+    db_path = db_path,
+    study_site = study_site,
+    scenario_id = scenario_id
+  )
   df_long <- run_stage_b(df = stage_a_result$processed_sheets)
   df_long <- add_study_arm(df_long)
   UA_ARMS <- c("UA", "SC", "SSP")
@@ -485,6 +501,13 @@ process_workbook <- function(input_path, archive_dir = NULL, export_path = NULL,
         ungroup()
     }
     
+    as.data.frame(df)
+  })
+  
+  df_long <- imap(df_long, function(df, sheet_nm) {
+    if (is.null(df) || nrow(df) == 0) return(df)
+    df$study_site <- if (is.null(study_site)) NA_character_ else as.character(study_site)
+    df$scenario_id <- if (is.null(scenario_id)) NA_character_ else as.character(scenario_id)
     as.data.frame(df)
   })
   

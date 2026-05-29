@@ -348,7 +348,12 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       })
       
       shared_state$processed_ict <- tryCatch({
-        process_workbook(input_path = saved_path, db_path = DB_DIR)
+        process_workbook(
+          input_path = saved_path,
+          db_path = DB_DIR,
+          study_site = input$study_site,
+          scenario_id = input$scenario
+        )
       }, error = function(e) {
         log_event(
           level = "ERROR",

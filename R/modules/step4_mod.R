@@ -590,6 +590,16 @@ step4_UI <- function(id) {
       hr(),
       customActivityUI(ns("custom_activities"))
       # ──────────────────────────────────────────────────────────────────────
+    ),
+    shinyjs::hidden(
+      div(
+        id = ns("complete_overlay"),
+        build_loading_state_overlay(
+          title = "Study processed successfully",
+          subtitle = "Opening the study library...",
+          status = "success"
+        )
+      )
     )
   )
 }
@@ -649,21 +659,8 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     # ──────────────────────────────────────────────────────────────────────
     
     w <- Waiter$new(
-      html = tagList(
-        div(
-          style = "display: flex; flex-direction: column; align-items: center; gap: 1.5rem;",
-          div(class = "green-ring"),
-          div(
-            style = "color: #ffffff; font-size: 1rem; font-weight: 600;",
-            "Generating EDGE templates"
-          ),
-          div(
-            style = "color: rgba(255,255,255,0.5); font-size: 0.8rem;",
-            "This may take a moment..."
-          )
-        )
-      ),
-      color = "rgba(31, 95, 139, 0.55)"
+      html = build_loading_state_overlay("Generating EDGE templates"),
+      color = "transparent"
     )
     
     # ── Helpers ──────────────────────────────────────────────────────────────
@@ -868,8 +865,14 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         visit_lookup <- dbGetQuery(CON, "
                         SELECT DISTINCT Study, Study_Arm, Visit_Label, Visit_Number
                         FROM ict_costing_tbl
-                        WHERE Visit_Label IS NOT NULL
-                      ")
+                        WHERE CPMS_ID = ? AND study_site = ? AND scenario_id = ?
+                          AND Visit_Label IS NOT NULL
+                      ",
+                      params = list(
+                        as.character(shared_state$cpms_id),
+                        as.character(shared_state$study_site),
+                        as.character(shared_state$scenario_id)
+                      ))
         
         templates <- build_all_edge_templates(adjusted, visit_lookup, shared_state$upload_meta$edge_id)
         
@@ -1029,46 +1032,16 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     observeEvent(input$complete, {
       
       current_session <- session
-      
-      showModal(modalDialog(
-        title     = NULL,
-        footer    = NULL,
-        easyClose = FALSE,
-        size      = "s",
-        div(
-          style = "text-align: center; padding: 1.5rem 1rem;",
-          div(
-            style = paste(
-              "width: 64px;",
-              "height: 64px;",
-              "border-radius: 50%;",
-              "background: #e6f4ea;",
-              "display: flex;",
-              "align-items: center;",
-              "justify-content: center;",
-              "margin: 0 auto 1rem auto;"
-            ),
-            tags$span(
-              style = "color: #28a745; font-size: 2rem; font-weight: 700;",
-              HTML("&check;")
-            )
-          ),
-          h4(
-            style = "margin-bottom: 0.5rem; color: #1d2a36;",
-            "Study processed successfully"
-          ),
-          p(
-            style = "color: #697786; margin-bottom: 0;",
-            "Opening the study library..."
-          )
-        )
-      ))
+      shinyjs::show("complete_overlay")
       
       later::later(function() {
         shiny::withReactiveDomain(current_session, {
-          removeModal()
+          shinyjs::hide("complete_overlay")
           templates(NULL)
           zip_path(NULL)
+          current_refresh <- isolate(shared_state$library_refresh)
+          if (is.null(current_refresh) || is.na(current_refresh)) current_refresh <- 0L
+          shared_state$library_refresh <- current_refresh + 1L
           reset_shared_state()
           current_step(NULL)
           shinyjs::runjs('$("a[data-value=\'tab_library\']").trigger("click")')
