@@ -34,7 +34,8 @@ appServer <- function(id, auth_state, current_step) {
       edge_templates  = NULL,
       current_step    = NULL,
       timestamp       = NULL,
-      current_study   = NULL
+      current_study   = NULL,
+      library_refresh = 0L
     )
 
     session$userData$reset_app_state <- function() {
@@ -53,6 +54,7 @@ appServer <- function(id, auth_state, current_step) {
       shared_state$current_step <- NULL
       shared_state$timestamp <- NULL
       shared_state$current_study <- NULL
+      shared_state$library_refresh <- 0L
       current_step(NULL)
     }
     

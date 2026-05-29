@@ -1039,6 +1039,9 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
           shinyjs::hide("complete_overlay")
           templates(NULL)
           zip_path(NULL)
+          current_refresh <- isolate(shared_state$library_refresh)
+          if (is.null(current_refresh) || is.na(current_refresh)) current_refresh <- 0L
+          shared_state$library_refresh <- current_refresh + 1L
           reset_shared_state()
           current_step(NULL)
           shinyjs::runjs('$("a[data-value=\'tab_library\']").trigger("click")')
