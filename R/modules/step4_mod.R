@@ -649,21 +649,8 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     # ──────────────────────────────────────────────────────────────────────
     
     w <- Waiter$new(
-      html = tagList(
-        div(
-          style = "display: flex; flex-direction: column; align-items: center; gap: 1.5rem;",
-          div(class = "green-ring"),
-          div(
-            style = "color: #ffffff; font-size: 1rem; font-weight: 600;",
-            "Generating EDGE templates"
-          ),
-          div(
-            style = "color: rgba(255,255,255,0.5); font-size: 0.8rem;",
-            "This may take a moment..."
-          )
-        )
-      ),
-      color = "rgba(31, 95, 139, 0.55)"
+      html = build_loading_state_overlay("Generating EDGE templates"),
+      color = "transparent"
     )
     
     # ── Helpers ──────────────────────────────────────────────────────────────
@@ -1035,32 +1022,11 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         footer    = NULL,
         easyClose = FALSE,
         size      = "s",
-        div(
-          style = "text-align: center; padding: 1.5rem 1rem;",
-          div(
-            style = paste(
-              "width: 64px;",
-              "height: 64px;",
-              "border-radius: 50%;",
-              "background: #e6f4ea;",
-              "display: flex;",
-              "align-items: center;",
-              "justify-content: center;",
-              "margin: 0 auto 1rem auto;"
-            ),
-            tags$span(
-              style = "color: #28a745; font-size: 2rem; font-weight: 700;",
-              HTML("&check;")
-            )
-          ),
-          h4(
-            style = "margin-bottom: 0.5rem; color: #1d2a36;",
-            "Study processed successfully"
-          ),
-          p(
-            style = "color: #697786; margin-bottom: 0;",
-            "Opening the study library..."
-          )
+        fade      = FALSE,
+        build_loading_state_overlay(
+          title = "Study processed successfully",
+          subtitle = "Opening the study library...",
+          status = "success"
         )
       ))
       

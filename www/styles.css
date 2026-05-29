@@ -14,6 +14,18 @@
   --pipeline-next-bg-hover: #eaf2f8;
   --pipeline-next-border-hover: #9eb9cd;
   --pipeline-next-shadow: 0 0 0 0.2rem rgba(31, 95, 139, 0.12);
+  --loading-overlay-bg: rgba(245, 247, 250, 0.5);
+  --loading-card-shadow: 0 24px 48px rgba(18, 34, 48, 0.14);
+}
+
+@keyframes spin-ring {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 body:not(.app-shell) .main-header,
@@ -160,6 +172,14 @@ body:not(.app-shell) .page-shell {
   .login-card .card-body {
     padding: 1.5rem;
   }
+
+  .loading-state-overlay {
+    padding: 1rem;
+  }
+
+  .loading-state-card {
+    padding: 1.5rem 1.1rem;
+  }
 }
 
 .nav-sidebar .nav-item {
@@ -193,6 +213,73 @@ body:not(.app-shell) .page-shell {
   color: var(--login-accent-dark) !important;
   background-image: none !important;
   box-shadow: var(--pipeline-next-shadow) !important;
+}
+
+.loading-state-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: var(--loading-overlay-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.loading-state-card {
+  width: min(100%, 24rem);
+  padding: 1.75rem 1.5rem;
+  border: 1px solid rgba(217, 225, 232, 0.9);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--loading-card-shadow);
+  text-align: center;
+}
+
+.loading-state-icon-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  margin: 0 auto 1rem;
+  border-radius: 999px;
+  background: #e6f4ea;
+}
+
+.green-ring {
+  width: 2.6rem;
+  height: 2.6rem;
+  border: 4px solid rgba(40, 167, 69, 0.2);
+  border-top-color: #28a745;
+  border-radius: 50%;
+  animation: spin-ring 0.9s linear infinite;
+}
+
+.loading-state-check {
+  color: #28a745;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.loading-state-title {
+  margin: 0 0 0.45rem;
+  color: var(--login-ink);
+  font-family: var(--login-font);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.loading-state-subtitle {
+  margin: 0;
+  color: var(--login-ink-soft);
+  font-family: var(--login-font);
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 .step2-rounding-wrap {
