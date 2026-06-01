@@ -46,45 +46,51 @@ sidebarServer <- function(id, auth_state, parent_session, current_step) {
       req(auth_state$logged_in)
       
       tagList(
-        # ── Process ICT button ───────────────────────────────────────────────────
         div(
-          style = "padding: 0.75rem; display: flex; justify-content: center;",
-          actionButton(
-            ns('new_ict'),
-            label = tagList(icon("upload"), " Process ICT"),
-            class = "btn-primary",
-            style = "width: 210px; font-weight: 600;"
-          )
-        ),
-        
-        # ── Nav items ─────────────────────────────────────────────────────────────
-        sidebarMenu(
-          id = "sidebar",
-          menuItem("Reporting",     tabName = "tab_reporting", icon = ionicon(name = "analytics")),
-          menuItem("Study Library", tabName = "tab_library",   icon = ionicon(name = "book")),
-          menuItem("Settings",      tabName = "tab_settings",  icon = ionicon(name = "settings")),
-          menuItem("Support",       tabName = "tab_support",   icon = ionicon(name = "help-buoy")),
-          if (isTRUE(is_admin(auth_state$role))) {
-            menuItem("Admin", tabName = "tab_admin", icon = icon("users-cog"))
-          },
-          tags$div(
-            style = "display:none",
-            menuItem("Study Workspace", tabName = "tab_study", icon = icon("folder-open")),
-            menuItem("ICT",        tabName = "tab_step1", icon = icon("file")),
-            menuItem("ICT Step 2", tabName = "tab_step2", icon = icon("file")),
-            menuItem("ICT Step 3", tabName = "tab_step3", icon = icon("file")),
-            menuItem("ICT Step 4", tabName = "tab_step4", icon = icon("file"))
-          )
-        ),
-        
-        # ── Logout button ─────────────────────────────────────────────────────────
-        div(
-          style = "padding: 0.75rem; position: absolute; bottom: 0; width: 100%; display: flex; justify-content: center;",
-          actionButton(
-            ns('logout'),
-            label = tagList(icon("sign-out-alt"), " Logout"),
-            class = "btn-outline-danger",
-            style = "width: 210px; font-weight: 600;"
+          class = "rids-sidebar-shell",
+          div(
+            class = "rids-sidebar-top",
+            actionButton(
+              ns('new_ict'),
+              label = tagList(icon("upload"), " Process ICT"),
+              class = "rids-sidebar-primary"
+            )
+          ),
+          
+          div(
+            class = "rids-sidebar-nav",
+            div(class = "rids-sidebar-section-label", "Work"),
+            sidebarMenu(
+              id = "sidebar",
+              menuItem("Reporting",     tabName = "tab_reporting", icon = icon("chart-line")),
+              menuItem("Study Library", tabName = "tab_library",   icon = icon("book-open")),
+              menuItem("Settings",      tabName = "tab_settings",  icon = icon("cog")),
+              menuItem("Support",       tabName = "tab_support",   icon = icon("life-ring")),
+              if (isTRUE(is_admin(auth_state$role))) {
+                tagList(
+                  tags$li(class = "rids-sidebar-section-label nav-item", "Admin"),
+                  menuItem("Admin", tabName = "tab_admin", icon = icon("users-cog"))
+                )
+              },
+              tags$div(
+                style = "display:none",
+                menuItem("Study Workspace", tabName = "tab_study", icon = icon("folder-open")),
+                menuItem("ICT",        tabName = "tab_step1", icon = icon("file")),
+                menuItem("ICT Step 2", tabName = "tab_step2", icon = icon("file")),
+                menuItem("ICT Step 3", tabName = "tab_step3", icon = icon("file")),
+                menuItem("ICT Step 4", tabName = "tab_step4", icon = icon("file"))
+              )
+            )
+          ),
+          
+          div(
+            class = "rids-sidebar-bottom",
+            div(class = "rids-sidebar-section-label", "Account"),
+            actionButton(
+              ns('logout'),
+              label = tagList(icon("sign-out-alt"), " Logout"),
+              class = "rids-sidebar-logout"
+            )
           )
         )
       )
