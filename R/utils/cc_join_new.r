@@ -42,7 +42,6 @@ df_long <- df %>%
   ) %>%
   filter(!is.na(cost_code), cost_code != "")
 
-View(df_long)
 
 # // Column Mapping
 # left = df_long, right = posting_lines
@@ -78,8 +77,8 @@ View(posting_lines)
 data <- read.csv("/Users/tategraham/Downloads/COST_CENTRE_TESTING_csv.csv", stringsAsFactors = FALSE)
 
 # 2. Write to XLSX format
-write_xlsx(posting_lines, "/Users/tategraham/Downloads/COST_CENTRE_TESTING_xlsx.xlsx")
-write.csv(posting_lines, "/Users/tategraham/Downloads/COST_CENTRE_TESTING_csv.csv", row.names = FALSE)
+write_xlsx(posting_lines, "/Users/tategraham/Downloads/new_matrix_COST_CENTRE_TESTING_xlsx.xlsx")
+write.csv(posting_lines, "/Users/tategraham/Downloads/new_matrix_COST_CENTRE_TESTING_csv.csv", row.names = FALSE)
 
 
 
