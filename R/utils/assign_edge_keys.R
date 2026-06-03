@@ -9,6 +9,8 @@ suppressPackageStartupMessages({
 #' template rows. Two grouping rules:
 #'   - Special sheets (Unscheduled / Setup & Closedown / Pharmacy):
 #'     one key per (sheet_name, Activity, row_id, staff_group, Study_Arm)
+#'   - Itemised study arms (currently SSP):
+#'     one key per source row (sheet_name, Visit, Activity, row_id, staff_group, Study_Arm)
 #'   - Main sheets:
 #'     one key per (Study_Arm, Visit)
 #'
@@ -17,6 +19,7 @@ suppressPackageStartupMessages({
 assign_edge_keys <- function(data) {
   
   .SPECIAL_SHEETS <- c("Unscheduled Activities", "Setup & Closedown", "Pharmacy")
+  .ITEMISED_ARMS  <- c("SSP")
   
   required <- c("sheet_name", "Activity", "row_id", "staff_group", "Study_Arm", "Visit")
   missing  <- setdiff(required, names(data))
@@ -28,17 +31,28 @@ assign_edge_keys <- function(data) {
     filter(sheet_name %in% .SPECIAL_SHEETS) |>
     distinct(sheet_name, Activity, row_id, staff_group, Study_Arm) |>
     mutate(edge_key = paste0("EDGE-", str_pad(row_number(), width = 4, pad = "0")))
-  
-  main_keys <- data |>
-    filter(!sheet_name %in% .SPECIAL_SHEETS) |>
-    distinct(Study_Arm, Visit) |>
+
+  itemised_keys <- data |>
+    filter(!sheet_name %in% .SPECIAL_SHEETS, Study_Arm %in% .ITEMISED_ARMS) |>
+    distinct(sheet_name, Visit, Activity, row_id, staff_group, Study_Arm) |>
     mutate(edge_key = paste0("EDGE-", str_pad(
       row_number() + nrow(special_keys), width = 4, pad = "0"
     )))
   
+  main_keys <- data |>
+    filter(!sheet_name %in% .SPECIAL_SHEETS, !Study_Arm %in% .ITEMISED_ARMS) |>
+    distinct(Study_Arm, Visit) |>
+    mutate(edge_key = paste0("EDGE-", str_pad(
+      row_number() + nrow(special_keys) + nrow(itemised_keys), width = 4, pad = "0"
+    )))
+  
   data |>
     left_join(special_keys, by = c("sheet_name", "Activity", "row_id", "staff_group", "Study_Arm")) |>
+    left_join(
+      itemised_keys,
+      by = c("sheet_name", "Visit", "Activity", "row_id", "staff_group", "Study_Arm")
+    ) |>
     left_join(main_keys,    by = c("Study_Arm", "Visit")) |>
-    mutate(edge_key = coalesce(edge_key.x, edge_key.y)) |>
+    mutate(edge_key = coalesce(edge_key.x, edge_key.y, edge_key)) |>
     select(-edge_key.x, -edge_key.y)
 }
