@@ -5,8 +5,11 @@ suppressPackageStartupMessages(library(dplyr))
 adjust_posting_lines <- function(out) {
   
   .ADJUSTMENT_SPECIAL <- c("Unscheduled Activities", "Setup & Closedown")
+  .ITEMISED_ARMS      <- c("SSP")
   
   .adjust <- function(df, group_vars) {
+    if (nrow(df) == 0) return(df)
+
     df %>%
       mutate(contract_price = contract_cost) %>%
       group_by(across(all_of(group_vars))) %>%
@@ -42,9 +45,13 @@ adjust_posting_lines <- function(out) {
     out %>%
       filter(sheet_name %in% .ADJUSTMENT_SPECIAL) %>%
       .adjust(c("row_id", "Activity", "staff_group", "scenario_id")),
+
+    out %>%
+      filter(!sheet_name %in% .ADJUSTMENT_SPECIAL, Study_Arm %in% .ITEMISED_ARMS) %>%
+      .adjust(c("row_id", "Activity", "staff_group", "scenario_id")),
     
     out %>%
-      filter(!sheet_name %in% .ADJUSTMENT_SPECIAL) %>%
+      filter(!sheet_name %in% .ADJUSTMENT_SPECIAL, !Study_Arm %in% .ITEMISED_ARMS) %>%
       # Group scheduled rows by Study_Arm so SSP is adjusted independently
       # from the main scheduled arm at the same visit.
       mutate(adj_group = trimws(coalesce(Study_Arm, sheet_name))) %>%

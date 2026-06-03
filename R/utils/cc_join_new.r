@@ -2,12 +2,16 @@ library(tidyverse)
 library(writexl)
 
 # Speciality cost centre
-speciality_code = '15039'
+speciality_code = '61105'
 
 # File paths
-df <- read_csv('/Users/tategraham/Downloads/Book7(Sheet1).csv')
+#df <- read_csv('/Users/tategraham/Downloads/Book7(Sheet1).csv')
+df <- read_csv("/Users/tategraham/Downloads/Book8(Sheet1)-2.csv")
+
 #posting_lines <- read_csv("/Users/tategraham/Downloads/75743_RDUHT_test_posting_lines_20260601_163338.csv")
-posting_lines <- read_csv('/Users/tategraham/Downloads/66795_RDUHT_Gusto_posting_lines_20260602_104238(in).csv')
+#posting_lines <- read_csv('/Users/tategraham/Downloads/66795_RDUHT_Gusto_posting_lines_20260602_104238(in).csv')
+posting_lines <- read_csv("/Users/tategraham/Downloads/66795_NDDHT_t_posting_lines_20260603_155312.csv")
+
 
 
 # CAPACITY_RD
@@ -37,6 +41,8 @@ df_long <- df %>%
     values_to = "cost_code"
   ) %>%
   filter(!is.na(cost_code), cost_code != "")
+
+View(df_long)
 
 # // Column Mapping
 # left = df_long, right = posting_lines

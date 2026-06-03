@@ -239,6 +239,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   
   .SPECIAL_SHEETS <- c("Unscheduled Activities", "Setup & Closedown", "Pharmacy")
   .CUSTOM_SHEET   <- "Custom Activities"
+  .ITEMISED_ARMS  <- c("SSP")
   # NOTE: new variables may need to be added in the future - this function should be param
   
   .EDGE_COLS <- c(
@@ -334,6 +335,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
     # Custom rows are excluded from the visit-style build path — they're
     # handled separately by .build_custom() and merged below.
     df <- df |> filter(sheet_name != .CUSTOM_SHEET)
+    template_name <- dplyr::first(df$template_arm)
     
     if (nrow(df) == 0) {
       # Empty arm (everything was custom) — return an empty template with
@@ -342,41 +344,94 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
         tibble::tibble(!!!setNames(rep(list(character(0)), length(.EDGE_COLS)), .EDGE_COLS))
       )
     }
-    
-    visit_keys <- df |>
-      filter(sheet_name != "Pharmacy") |>
-      distinct(Study_Arm, Visit, edge_key)
-    
-    df |>
-      summarise(
-        total = sum(adjusted_amount, na.rm = TRUE),
-        .by   = c(study_name, Visit, Study_Arm)
-      ) |>
-      left_join(visit_keys, by = c("Study_Arm", "Visit")) |>
-      left_join(
-        visit_lookup |> select(Study, Study_Arm, Visit_Number, Visit_Label),
-        by = c("study_name" = "Study", "Study_Arm", "Visit" = "Visit_Number")
-      ) |>
-      arrange(Visit) |>
-      mutate(
-        `EDGE Project ID`                                      = edge_id,
-        `Template Name`                                        = Study_Arm,
-        `Template Level (Project | Participant | ProjectSite)` = NA,
-        `Project Arm (Participant only)`                       = NA,
-        `Project Site Name (ProjectSite only)`                 = NA,
-        `Cost Item Description`                                = paste0(
-          Visit, " - ", str_replace_all(Visit_Label, "\\.", " ")
-        ),
-        `Analysis Code`                                        = edge_key,
-        `Cost Category`                                        = "Research Cost",
-        `Default Cost`                                         = total,
-        `Currency`                                             = "GBP",
-        `Department`                                           = NA,
-        `Overhead Cost`                                        = NA,
-        `Time`                                                 = NA,
-        `Activity Type`                                        = NA
-      ) |>
-      select(all_of(.EDGE_COLS))
+
+    itemised_rows <- df |> filter(Study_Arm %in% .ITEMISED_ARMS)
+    visit_rows    <- df |> filter(!Study_Arm %in% .ITEMISED_ARMS)
+
+    itemised_built <- if (nrow(itemised_rows) > 0) {
+      itemised_rows |>
+        summarise(
+          total = sum(adjusted_amount, na.rm = TRUE),
+          .by   = c(study_name, Visit, Study_Arm, Visit_Label, Activity, row_id, staff_group, edge_key)
+        ) |>
+        left_join(
+          visit_lookup |> select(Study, Study_Arm, Visit_Number, Visit_Label),
+          by = c("study_name" = "Study", "Study_Arm", "Visit" = "Visit_Number", "Visit_Label")
+        ) |>
+        arrange(Visit, row_id, staff_group) |>
+        mutate(
+          visit_text = str_replace_all(Visit, "\\.", " "),
+          visit_label_text = str_replace_all(Visit_Label, "\\.", " "),
+          item_text = str_replace_all(Activity, "\\.", " "),
+          visit_prefix = if_else(
+            is.na(visit_label_text) | visit_label_text == "",
+            visit_text,
+            if_else(
+              str_starts(visit_label_text, fixed(visit_text)),
+              visit_label_text,
+              paste0(visit_text, " - ", visit_label_text)
+            )
+          ),
+          `EDGE Project ID`                                      = edge_id,
+          `Template Name`                                        = template_name,
+          `Template Level (Project | Participant | ProjectSite)` = NA,
+          `Project Arm (Participant only)`                       = NA,
+          `Project Site Name (ProjectSite only)`                 = NA,
+          `Cost Item Description`                                = paste0(visit_prefix, " - ", item_text),
+          `Analysis Code`                                        = edge_key,
+          `Cost Category`                                        = "Research Cost",
+          `Default Cost`                                         = total,
+          `Currency`                                             = "GBP",
+          `Department`                                           = NA,
+          `Overhead Cost`                                        = NA,
+          `Time`                                                 = NA,
+          `Activity Type`                                        = NA
+        ) |>
+        select(all_of(.EDGE_COLS))
+    } else {
+      tibble::tibble(!!!setNames(rep(list(character(0)), length(.EDGE_COLS)), .EDGE_COLS))
+    }
+
+    visit_built <- if (nrow(visit_rows) > 0) {
+      visit_keys <- visit_rows |>
+        filter(sheet_name != "Pharmacy") |>
+        distinct(Study_Arm, Visit, edge_key)
+      
+      visit_rows |>
+        summarise(
+          total = sum(adjusted_amount, na.rm = TRUE),
+          .by   = c(study_name, Visit, Study_Arm)
+        ) |>
+        left_join(visit_keys, by = c("Study_Arm", "Visit")) |>
+        left_join(
+          visit_lookup |> select(Study, Study_Arm, Visit_Number, Visit_Label),
+          by = c("study_name" = "Study", "Study_Arm", "Visit" = "Visit_Number")
+        ) |>
+        arrange(Visit) |>
+        mutate(
+          `EDGE Project ID`                                      = edge_id,
+          `Template Name`                                        = template_name,
+          `Template Level (Project | Participant | ProjectSite)` = NA,
+          `Project Arm (Participant only)`                       = NA,
+          `Project Site Name (ProjectSite only)`                 = NA,
+          `Cost Item Description`                                = paste0(
+            Visit, " - ", str_replace_all(Visit_Label, "\\.", " ")
+          ),
+          `Analysis Code`                                        = edge_key,
+          `Cost Category`                                        = "Research Cost",
+          `Default Cost`                                         = total,
+          `Currency`                                             = "GBP",
+          `Department`                                           = NA,
+          `Overhead Cost`                                        = NA,
+          `Time`                                                 = NA,
+          `Activity Type`                                        = NA
+        ) |>
+        select(all_of(.EDGE_COLS))
+    } else {
+      tibble::tibble(!!!setNames(rep(list(character(0)), length(.EDGE_COLS)), .EDGE_COLS))
+    }
+
+    bind_rows(visit_built, itemised_built)
   }
   
   # ── Dispatch and return ───────────────────────────────────────────────────────
@@ -386,22 +441,34 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   # Main data = everything that isn't a "special sheet" AND isn't custom,
   # plus Pharmacy (which appears in both buckets historically).
   # Custom rows are handled separately and merged into the per-arm output below.
-  main_data <- data |> filter(
-    (!sheet_name %in% .SPECIAL_SHEETS | sheet_name == "Pharmacy") &
-      sheet_name != .CUSTOM_SHEET
-  )
+  main_data <- data |> 
+    filter(
+      (!sheet_name %in% .SPECIAL_SHEETS | sheet_name == "Pharmacy") &
+        sheet_name != .CUSTOM_SHEET
+    ) |>
+    mutate(
+      template_arm = if_else(Study_Arm %in% .ITEMISED_ARMS, sheet_name, Study_Arm)
+    )
   
   custom_data <- data |> filter(sheet_name == .CUSTOM_SHEET)
   
-  special_list <- special_data |>
-    group_by(sheet_name) |>
-    group_map(~ .build_special(.x), .keep = TRUE) |>
-    setNames(sort(unique(special_data$sheet_name)))
+  special_list <- if (nrow(special_data) > 0) {
+    special_data |>
+      group_by(sheet_name) |>
+      group_map(~ .build_special(.x), .keep = TRUE) |>
+      setNames(sort(unique(special_data$sheet_name)))
+  } else {
+    list()
+  }
   
-  main_list <- main_data |>
-    group_by(Study_Arm) |>
-    group_map(~ .build_main(.x), .keep = TRUE) |>
-    setNames(sort(unique(main_data$Study_Arm)))
+  main_list <- if (nrow(main_data) > 0) {
+    main_data |>
+      group_by(template_arm) |>
+      group_map(~ .build_main(.x), .keep = TRUE) |>
+      setNames(sort(unique(main_data$template_arm)))
+  } else {
+    list()
+  }
   
   # ── ADDON ── Merge custom rows into their selected arms' templates ────────
   # For each Study_Arm that has custom rows, build the custom block and
