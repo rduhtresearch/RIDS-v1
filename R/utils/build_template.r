@@ -258,6 +258,23 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
     "Time", 
     "Activity Type"
   )
+
+  empty_edge_template <- tibble::tibble(
+    `EDGE Project ID` = character(),
+    `Template Name` = character(),
+    `Template Level (Project | Participant | ProjectSite)` = character(),
+    `Project Arm (Participant only)` = character(),
+    `Project Site Name (ProjectSite only)` = character(),
+    `Cost Item Description` = character(),
+    `Analysis Code` = character(),
+    `Cost Category` = character(),
+    `Default Cost` = numeric(),
+    `Currency` = character(),
+    `Department` = character(),
+    `Overhead Cost` = character(),
+    `Time` = character(),
+    `Activity Type` = character()
+  )
   
   # NOTE: edge_key is assigned upstream by assign_edge_keys() and arrives on
   # the posting lines data already populated.
@@ -270,6 +287,13 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
     stop("build_all_edge_templates(): 'visit_lookup' is required and must contain ",
          "Study, Study_Arm, Visit_Label, Visit_Number.")
   }
+
+  visit_labels_lookup <- visit_lookup |>
+    filter(!is.na(Visit_Label), nzchar(trimws(Visit_Label))) |>
+    summarise(
+      visit_label_lookup = dplyr::first(Visit_Label),
+      .by = c(Study, Visit_Number)
+    )
   
   # ── Build templates ───────────────────────────────────────────────────────────
   
@@ -340,9 +364,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
     if (nrow(df) == 0) {
       # Empty arm (everything was custom) — return an empty template with
       # the right column shape so downstream code doesn't break.
-      return(
-        tibble::tibble(!!!setNames(rep(list(character(0)), length(.EDGE_COLS)), .EDGE_COLS))
-      )
+      return(empty_edge_template)
     }
 
     itemised_rows <- df |> filter(Study_Arm %in% .ITEMISED_ARMS)
@@ -355,11 +377,12 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
           .by   = c(study_name, Visit, Study_Arm, Visit_Label, Activity, row_id, staff_group, edge_key)
         ) |>
         left_join(
-          visit_lookup |> select(Study, Study_Arm, Visit_Number, Visit_Label),
-          by = c("study_name" = "Study", "Study_Arm", "Visit" = "Visit_Number", "Visit_Label")
+          visit_labels_lookup,
+          by = c("study_name" = "Study", "Visit" = "Visit_Number")
         ) |>
         arrange(Visit, row_id, staff_group) |>
         mutate(
+          Visit_Label = coalesce(Visit_Label, visit_label_lookup),
           visit_text = str_replace_all(Visit, "\\.", " "),
           visit_label_text = str_replace_all(Visit_Label, "\\.", " "),
           item_text = str_replace_all(Activity, "\\.", " "),
@@ -387,9 +410,10 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
           `Time`                                                 = NA,
           `Activity Type`                                        = NA
         ) |>
+        select(-visit_label_lookup) |>
         select(all_of(.EDGE_COLS))
     } else {
-      tibble::tibble(!!!setNames(rep(list(character(0)), length(.EDGE_COLS)), .EDGE_COLS))
+      empty_edge_template
     }
 
     visit_built <- if (nrow(visit_rows) > 0) {
@@ -400,15 +424,16 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
       visit_rows |>
         summarise(
           total = sum(adjusted_amount, na.rm = TRUE),
-          .by   = c(study_name, Visit, Study_Arm)
+          .by   = c(study_name, Visit, Study_Arm, Visit_Label)
         ) |>
         left_join(visit_keys, by = c("Study_Arm", "Visit")) |>
         left_join(
-          visit_lookup |> select(Study, Study_Arm, Visit_Number, Visit_Label),
-          by = c("study_name" = "Study", "Study_Arm", "Visit" = "Visit_Number")
+          visit_labels_lookup,
+          by = c("study_name" = "Study", "Visit" = "Visit_Number")
         ) |>
         arrange(Visit) |>
         mutate(
+          Visit_Label = coalesce(Visit_Label, visit_label_lookup),
           `EDGE Project ID`                                      = edge_id,
           `Template Name`                                        = template_name,
           `Template Level (Project | Participant | ProjectSite)` = NA,
@@ -426,9 +451,10 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
           `Time`                                                 = NA,
           `Activity Type`                                        = NA
         ) |>
+        select(-visit_label_lookup) |>
         select(all_of(.EDGE_COLS))
     } else {
-      tibble::tibble(!!!setNames(rep(list(character(0)), length(.EDGE_COLS)), .EDGE_COLS))
+      empty_edge_template
     }
 
     bind_rows(visit_built, itemised_built)
