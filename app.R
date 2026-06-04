@@ -35,7 +35,7 @@ ui <- tagList(
       "RIDS ",
       span(
         style = "font-size: 0.7rem; color: #697786; font-weight: 400;",
-        "pre-alpha test 2"
+        "CI/CD TEST"
       )
     )), rightUi = uiOutput("user_badge")),
     sidebar = dashboardSidebar(
