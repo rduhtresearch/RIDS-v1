@@ -77,6 +77,11 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
   moduleServer(id, function(input, output, session) {
           
     working_data <- reactiveValues(df = NULL)
+    is_saved <- reactiveVal(FALSE)
+    
+    observe({
+      shinyjs::toggleState("next_step", condition = isTRUE(is_saved()))
+    })
     
     # ── Load data ─────────────────────────────────────────────────────────────
     observe({
@@ -97,6 +102,7 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
       )
       
       working_data$df <- df
+      is_saved(FALSE)
     })
     
     apply_contract_cost_mode <- function(use_unrounded_cost) {
@@ -112,6 +118,7 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
     # ── Toggle rounding mode ──────────────────────────────────────────────────
     observeEvent(input$use_unrounded_cost, {
       apply_contract_cost_mode(input$use_unrounded_cost)
+      is_saved(FALSE)
     })
     
     # ── Row select → modal ────────────────────────────────────────────────────
@@ -148,6 +155,7 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
       working_data$df[selected_row, "Contract_Cost"] <- input$contract_value
       
       updateReactable("table", data = working_data$df)
+      is_saved(FALSE)
       removeModal()
     })
     
@@ -195,8 +203,19 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
         )
         app_log_info("step2", "Save completed")
 
+        is_saved(TRUE)
         showNotification("Saved successfully", type = "message", duration = 5)
       }, error = function(e) {
+        if (handle_fatal_db_error(session, e, "step2", list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          rows = nrow(working_data$df),
+          stage = "save"
+        ))) {
+          is_saved(FALSE)
+          return(NULL)
+        }
+
         app_log_exception("step2", "Step 2 save failed", e, list(
           cpms_id = shared_state$cpms_id,
           upload_id = shared_state$upload_id,
@@ -216,6 +235,7 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
             error = conditionMessage(e)
           )
         )
+        is_saved(FALSE)
         showNotification("Save failed", type = "error", duration = 5)
       })
     })

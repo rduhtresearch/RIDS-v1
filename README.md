@@ -115,6 +115,28 @@ Normal users only need these steps:
 source("R/SETUP/new_setup.R")
 ```
 
+### Manual backup and restore
+
+Close RIDS first if possible.
+
+To create the daily backup:
+
+```r
+source("R/SETUP/manual_backup.R")
+```
+
+To restore from a backup:
+
+1. Open `R/SETUP/manual_restore.R`
+2. Set `RESTORE_BACKUP_TIMESTAMP <- "YYYY-MM-DD_HHMMSS"`
+3. Run:
+
+```r
+source("R/SETUP/manual_restore.R")
+```
+
+After restore, reopen RIDS and check the key data you expected to recover.
+
 ### Run local checks
 
 ```bash

@@ -58,6 +58,47 @@ In `R` or `RStudio`:
 source("R/SETUP/new_setup.R")
 ```
 
+## Daily Manual Backup
+
+At the end of the day, from the live shared-drive RIDS folder in `R` or `RStudio`, run:
+
+```r
+source("R/SETUP/manual_backup.R")
+```
+
+What it does:
+
+1. Reads the live deployment config and finds the production DuckDB file
+2. Copies the full DuckDB file into `P:\RESEARCH SYSTEMS\RIDS_BACKUP\<timestamp>\`
+3. Exports every database table to `csv\` inside the same backup folder
+4. Writes a `backup_manifest.txt` file with the source DB and exported tables
+5. Deletes older backup runs so only the newest 2 successful backups remain
+
+If possible, ask users to close RIDS before running the backup.
+
+## Manual Restore
+
+If you need to restore a backup:
+
+1. Ask users to close RIDS
+2. Open `R/SETUP/manual_restore.R`
+3. Set `RESTORE_BACKUP_TIMESTAMP <- "YYYY-MM-DD_HHMMSS"` to the backup folder you want
+4. In `R` or `RStudio`, run:
+
+```r
+source("R/SETUP/manual_restore.R")
+```
+
+What it does:
+
+1. Reads the live deployment config and finds the production DuckDB file
+2. Creates a safety copy of the current live DB under `P:\RESEARCH SYSTEMS\RIDS_BACKUP\pre_restore_safety\`
+3. Copies the selected backup `RIDS.duckdb` into the live DB path
+4. Verifies the restored file can be opened and lists its tables
+5. Writes a `restore_manifest.txt` file in the safety folder
+
+After restore, reopen RIDS and verify the data you expected to recover.
+
 ### 3. Prepare the Windows laptop for first use
 
 Run the preparation launcher once on each Windows laptop:

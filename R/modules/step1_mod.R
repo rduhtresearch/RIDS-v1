@@ -15,6 +15,11 @@ step1_UI <- function(id) {
       selectInput(ns('speciality_id'), 'Clinical speciality', choices = NULL),
       textInput(ns('edge_id'), 'EDGE ID'),
       textInput(ns('study_name'), 'Study Name'),
+      checkboxInput(
+        ns("include_screening_failure"),
+        "Generate Screening Failure EDGE templates",
+        value = FALSE
+      ),
     fileInput(ns("upload"), "Choose Excel File",
               multiple = FALSE,
               accept = c(".xlsx")),
@@ -26,6 +31,23 @@ step1_UI <- function(id) {
 
 step1_Server <- function(id, auth_state, shared_state, current_step) {
   moduleServer(id, function(input, output, session) {
+    reset_step1_form <- function() {
+      updateSelectInput(session, "scenario", selected = "A")
+      updateSelectInput(session, "study_site", selected = "")
+      updateSelectInput(session, "speciality_id", selected = "")
+      updateTextInput(session, "edge_id", value = "")
+      updateTextInput(session, "study_name", value = "")
+      updateCheckboxInput(session, "include_screening_failure", value = FALSE)
+      updateTextAreaInput(session, "notes", value = "")
+      session$sendCustomMessage("resetFileInput", list(id = session$ns("upload")))
+
+      feedbackDanger("edge_id", show = FALSE)
+      feedbackDanger("upload", show = FALSE)
+      feedbackDanger("study_site", show = FALSE)
+      feedbackDanger("speciality_id", show = FALSE)
+    }
+
+    session$userData$reset_step1_form <- reset_step1_form
     
     # ── Specialities lookup (loaded once at module init) ─────────────────────
     specialities <- reactive({
@@ -264,6 +286,15 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
         )
         nrow(existing) > 0
       }, error = function(e) {
+        if (handle_fatal_db_error(session, e, "step1", list(
+          cpms_id = extracted_cpms,
+          study_site = input$study_site,
+          scenario_id = input$scenario,
+          stage = "duplicate_check"
+        ))) {
+          return(NA)
+        }
+
         app_log_exception("step1", "Duplicate study check failed", e, list(
           cpms_id = extracted_cpms,
           study_site = input$study_site,
@@ -312,6 +343,16 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
         )
         TRUE
       }, error = function(e) {
+        if (handle_fatal_db_error(session, e, "step1", list(
+          cpms_id = extracted_cpms,
+          edge_id = input$edge_id,
+          study_site = input$study_site,
+          scenario_id = input$scenario,
+          stage = "meta_data_insert"
+        ))) {
+          return(FALSE)
+        }
+
         log_event(
           level = "ERROR",
           area = "upload",
@@ -355,6 +396,15 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
           scenario_id = input$scenario
         )
       }, error = function(e) {
+        if (handle_fatal_db_error(session, e, "step1", list(
+          cpms_id = extracted_cpms,
+          upload_id = upload_id,
+          scenario_id = input$scenario,
+          stage = "workbook_process"
+        ))) {
+          return(NULL)
+        }
+
         log_event(
           level = "ERROR",
           area = "upload",
@@ -390,12 +440,14 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       shared_state$upload_id        <- upload_id
       shared_state$scenario_id      <- input$scenario
       shared_state$study_site       <- input$study_site
+      shared_state$include_screening_failure <- isTRUE(input$include_screening_failure)
       shared_state$speciality_id    <- sp_id
       shared_state$speciality_name  <- sp_name
       shared_state$study_name       <- input$study_name
       shared_state$upload_meta      <- list(
         scenario_id     = input$scenario,
         study_site      = input$study_site,
+        include_screening_failure = isTRUE(input$include_screening_failure),
         edge_id         = input$edge_id,
         study_name      = input$study_name,
         filename        = original_name,
