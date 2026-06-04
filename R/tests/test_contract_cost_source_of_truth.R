@@ -58,10 +58,10 @@ run_contract_cost_source_of_truth_tests <- function() {
 
   source("R/utils/posting_lines.r")
   source("R/utils/template_build_main.r")
+  source("R/utils/screening_failure_transform.R")
   source("R/utils/adjust.r")
   source("R/utils/assign_edge_keys.R")
   source("R/utils/build_template.r")
-  source("R/utils/screening_failure_transform.R")
   source("R/utils/pipeline_fixed.r")
 
   db_path <- tempfile(fileext = ".duckdb")
@@ -104,6 +104,26 @@ run_contract_cost_source_of_truth_tests <- function() {
       Contract_Cost = c(123.45, 210.55, 333.33, 444.44),
       activity_occurrence_id = c("AO1", NA_character_, "AO2", "AO3"),
       staff_group = c(1L, 1L, 1L, 1L)
+    ),
+    append = TRUE
+  )
+
+  dbWriteTable(
+    con,
+    "ict_costing_tbl",
+    tibble(
+      CPMS_ID = c("CP1", "CP1"),
+      study_site = c("RDUHT", "RDUHT"),
+      scenario_id = c("A", "A"),
+      Study = c("Study A", "Study A"),
+      Visit_Number = c("VISIT - 001", "VISIT - 001"),
+      Study_Arm = c("Arm A", "SSP"),
+      Visit_Label = c("Screening", "Screening"),
+      Activity_Name = c("Visit Summary", "Blood Test"),
+      ICT_Cost = c(100, 25),
+      Contract_Cost = c(2032, 25),
+      activity_occurrence_id = c("ARM-A-1", "SSP-1"),
+      staff_group = c(1L, 2L)
     ),
     append = TRUE
   )
@@ -423,51 +443,132 @@ run_contract_cost_source_of_truth_tests <- function() {
     time_required = c(30, 45, 40, 50, 20, 20)
   )
 
-  screening_disabled <- duplicate_screening_failure_rows(
-    screening_input,
-    include_screening_failure = FALSE
+  screening_source <- list(
+    `Arm A` = tibble(
+      Study_Arm = c("Arm A", "Arm A", "SSP"),
+      Visit = c("VISIT - 001", "VISIT - 002", "VISIT - 001"),
+      Visit_Label = c("Screening", "Follow-up", "Screening"),
+      Activity = c("Visit Summary", "Visit Summary", "Blood Test"),
+      Activity.Type = c("Visit", "Visit", "Investigation"),
+      Staff.Role = c("Nurse", "Nurse", "Medical Staff"),
+      Activity.Cost = c("100", "120", "25"),
+      study_name = c("Study A", "Study A", "Study A"),
+      cpms_id = c("CP1", "CP1", "CP1"),
+      study_site = c("RDUHT", "RDUHT", "RDUHT"),
+      scenario_id = c("A", "A", "A"),
+      staff_group = c(1L, 1L, 2L)
+    ),
+    `Unscheduled Activities` = tibble(
+      Study_Arm = "UA",
+      Visit = "VISIT - 001",
+      Visit_Label = "Screening",
+      Activity = "Ad hoc",
+      Activity.Type = "Visit",
+      Staff.Role = "Nurse",
+      Activity.Cost = "5",
+      study_name = "Study A",
+      cpms_id = "CP1",
+      study_site = "RDUHT",
+      scenario_id = "A",
+      staff_group = 1L
+    )
   )
-  .expect("disabled duplication leaves rows unchanged",
-          identical(screening_disabled, screening_input))
 
-  screening_enabled <- duplicate_screening_failure_rows(
-    screening_input,
+  duplicated_source <- duplicate_screening_failure_sheets(
+    screening_source,
     include_screening_failure = TRUE
   )
-  screening_only <- screening_enabled %>%
-    filter(grepl("SCREENING VISIT$", sheet_name)) %>%
-    arrange(sheet_name, Study_Arm, row_id)
-
-  .expect("enabled duplication adds one extra first-visit block per main arm template",
-          nrow(screening_enabled) == nrow(screening_input) + 3L)
-  .expect("duplicated rows come from the earliest canonical visit per main arm",
+  .expect("processed ICT duplication creates a screening sheet per main arm",
+          "Arm A - SCREENING VISIT" %in% names(duplicated_source))
+  .expect("processed ICT duplication only copies first-visit rows",
           identical(
-            screening_only %>% distinct(sheet_name, Visit) %>% pull(Visit),
+            duplicated_source[["Arm A - SCREENING VISIT"]]$Visit,
             c("VISIT - 001", "VISIT - 001")
           ))
-  .expect("non-itemised duplicated rows get the screening arm identity",
-          all(
-            screening_only %>%
-              filter(!Study_Arm %in% "SSP") %>%
-              pull(Study_Arm) %in% c(
-                "Arm A - SCREENING VISIT",
-                "Arm B - SCREENING VISIT"
-              )
-          ))
-  .expect("itemised duplicated rows stay itemised while moving into the screening template",
-          all(
-            screening_only %>%
-              filter(Study_Arm == "SSP") %>%
-              pull(sheet_name) == "Arm A - SCREENING VISIT"
-          ))
-  .expect("duplicated rows preserve visit labels and row-level source data",
+  .expect("processed ICT duplication preserves per-activity source costs",
           identical(
-            screening_only %>%
-              filter(Study_Arm != "SSP") %>%
-              arrange(sheet_name, row_id) %>%
-              pull(Visit_Label),
-            c("Screening", "Baseline")
+            duplicated_source[["Arm A - SCREENING VISIT"]]$Activity.Cost,
+            c("100", "25")
           ))
+
+  screening_prepared <- join_ict_costs(
+    prepare_posting_input(
+      ict = duplicated_source,
+      ict_db_path = NULL,
+      scenario_id = "A"
+    ),
+    db_path
+  )
+  screening_prepared <- prepare_screening_failure_posting_input(screening_prepared)
+
+  .expect("screening prepared rows keep the saved contract targets",
+          identical(
+            screening_prepared %>%
+              filter(sheet_name == "Arm A - SCREENING VISIT") %>%
+              arrange(Activity, staff_group) %>%
+              pull(contract_cost),
+            c(25, 2032)
+          ))
+  .expect("screening prepared rows use the synthetic sheet as the main arm identity",
+          identical(
+            screening_prepared %>%
+              filter(sheet_name == "Arm A - SCREENING VISIT", Study_Arm != "SSP") %>%
+              pull(Study_Arm),
+            "Arm A - SCREENING VISIT"
+          ))
+
+  screening_enabled <- tibble(
+    row_id = c(1L, 1L, 2L, 2L, 3L, 3L, 4L, 5L),
+    scenario_id = rep("A", 8),
+    row_category_auto = rep("BASELINE", 8),
+    calc_tag = NA_character_,
+    row_category = rep("BASELINE", 8),
+    is_medic = rep(FALSE, 8),
+    cpms_id = rep("CP1", 8),
+    study_site = rep("RDUHT", 8),
+    study_name = rep("Study A", 8),
+    Study_Arm = c("Arm A", "Arm A", "Arm A", "Arm A", "Arm A", "Arm A", "Arm A", "Arm B"),
+    Activity = c(
+      "Informed consent", "Informed consent",
+      "Informed consent", "Informed consent",
+      "Demographics", "Demographics",
+      "Visit Summary", "Visit Summary"
+    ),
+    Visit = c(
+      "VISIT - 001", "VISIT - 001",
+      "VISIT - 001", "VISIT - 001",
+      "VISIT - 001", "VISIT - 001",
+      "VISIT - 002", "VISIT - 001"
+    ),
+    posting_line_type_id = c(
+      "DIRECT", "CAPACITY_RD",
+      "DIRECT", "CAPACITY_RD",
+      "DIRECT", "CAPACITY_RD",
+      "DIRECT", "DIRECT"
+    ),
+    posting_amount = c(80, 20, 40, 10, 30, 20, 120, 200),
+    destination_bucket = rep("DEST_RD", 8),
+    destination_entity = rep("R&D", 8),
+    cost_code = NA_character_,
+    sheet_name = c(
+      rep("Arm A - SCREENING VISIT", 6),
+      "Arm A",
+      "Arm B - SCREENING VISIT"
+    ),
+    Visit_Label = c(
+      rep("Screening", 6),
+      "Follow-up",
+      "Baseline"
+    ),
+    activity_occurrence_id = c("AO1", "AO1", "AO2", "AO2", "AO3", "AO3", "AO4", "BO1"),
+    staff_group = rep(1L, 8),
+    contract_cost = c(rep(2032, 6), 120, 200),
+    Department = c(rep("Dept A", 7), "Dept B"),
+    Staff.Role = c(rep("Nurse", 7), "Coordinator"),
+    activity_type = rep("Visit", 8),
+    time_required = c(30, 30, 35, 35, 15, 15, 45, 40)
+  )
+  screening_enabled <- prepare_screening_failure_posting_input(screening_enabled)
 
   screening_adjusted <- adjust_posting_lines(screening_enabled)
   screening_keyed <- assign_edge_keys(screening_adjusted)
@@ -486,10 +587,43 @@ run_contract_cost_source_of_truth_tests <- function() {
           all(!is.na(screening_keyed$edge_key[grepl("SCREENING VISIT$", screening_keyed$sheet_name)])))
   .expect("screening failure templates are built as ordinary main-arm tabs",
           all(c("Arm A - SCREENING VISIT", "Arm B - SCREENING VISIT") %in% names(screening_templates)))
-  .expect("screening templates reuse the original first-visit label in output",
+  .expect("ordinary main-arm templates still roll up by visit",
+          identical(
+            screening_templates[["Arm A"]]$`Cost Item Description`,
+            "VISIT - 001 - Follow-up"
+          ))
+  .expect("screening templates are itemised per duplicated source row",
           identical(
             screening_templates[["Arm A - SCREENING VISIT"]]$`Cost Item Description`,
-            c("VISIT - 001 - Screening", "VISIT - 002 - Screening - Blood Test")
+            c(
+              "VISIT - 001 - Screening - Informed consent",
+              "VISIT - 001 - Screening - Informed consent",
+              "VISIT - 001 - Screening - Demographics"
+            )
+          ))
+  .expect("repeated screening source rows remain separate in the template",
+          sum(
+            screening_templates[["Arm A - SCREENING VISIT"]]$`Cost Item Description` ==
+              "VISIT - 001 - Screening - Informed consent"
+          ) == 2L)
+  .expect("screening failure rows get distinct itemised EDGE keys",
+          dplyr::n_distinct(
+            screening_keyed$edge_key[screening_keyed$sheet_name == "Arm A - SCREENING VISIT"]
+          ) == 3L)
+  expected_screening_costs <- screening_keyed %>%
+    filter(sheet_name == "Arm A - SCREENING VISIT") %>%
+    summarise(total = sum(adjusted_amount), .by = c(row_id, Activity, staff_group, edge_key)) %>%
+    arrange(row_id, staff_group) %>%
+    pull(total)
+  .expect("screening template costs are grouped adjusted_amount sums",
+          identical(
+            screening_templates[["Arm A - SCREENING VISIT"]]$`Default Cost`,
+            expected_screening_costs
+          ))
+  .expect("screening template costs reconcile to the duplicated visit total",
+          identical(
+            round(sum(screening_templates[["Arm A - SCREENING VISIT"]]$`Default Cost`), 2),
+            2032
           ))
 
   cat("\n", strrep("=", 60), "\n", sep = "")

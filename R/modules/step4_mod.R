@@ -736,30 +736,9 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         message = "Template generation started",
         details = list(scenario_id = shared_state$scenario_id)
       )
-
-      edge_export_input <- tryCatch({
-        duplicate_screening_failure_rows(
-          shared_state$evaluated_plan,
-          include_screening_failure = isTRUE(shared_state$include_screening_failure)
-        )
-      }, error = function(e) {
-        app_log_exception("step4", "Screening failure duplication failed", e, list(
-          cpms_id = shared_state$cpms_id,
-          include_screening_failure = isTRUE(shared_state$include_screening_failure)
-        ))
-        showNotification(
-          paste("Failed to prepare Screening Failure rows:", conditionMessage(e)),
-          type = "error",
-          duration = 10
-        )
-        w$hide()
-        return(NULL)
-      })
-
-      req(edge_export_input)
       
       adjusted <- tryCatch({
-        adjust_posting_lines(edge_export_input)
+        adjust_posting_lines(shared_state$evaluated_plan)
       }, error = function(e) {
         if (handle_fatal_db_error(session, e, "step4", list(
           cpms_id = shared_state$cpms_id,

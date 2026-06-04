@@ -11,6 +11,8 @@ suppressPackageStartupMessages({
 #'     one key per (sheet_name, Activity, row_id, staff_group, Study_Arm)
 #'   - Itemised study arms (currently SSP):
 #'     one key per source row (sheet_name, Visit, Activity, row_id, staff_group, Study_Arm)
+#'   - Screening Failure sheets:
+#'     one key per source row, using the same itemised export path as SSP
 #'   - Main sheets:
 #'     one key per (Study_Arm, Visit)
 #'
@@ -19,7 +21,6 @@ suppressPackageStartupMessages({
 assign_edge_keys <- function(data) {
   
   .SPECIAL_SHEETS <- c("Unscheduled Activities", "Setup & Closedown", "Pharmacy")
-  .ITEMISED_ARMS  <- c("SSP")
   
   required <- c("sheet_name", "Activity", "row_id", "staff_group", "Study_Arm", "Visit")
   missing  <- setdiff(required, names(data))
@@ -33,14 +34,20 @@ assign_edge_keys <- function(data) {
     mutate(edge_key = paste0("EDGE-", str_pad(row_number(), width = 4, pad = "0")))
 
   itemised_keys <- data |>
-    filter(!sheet_name %in% .SPECIAL_SHEETS, Study_Arm %in% .ITEMISED_ARMS) |>
+    filter(
+      !sheet_name %in% .SPECIAL_SHEETS,
+      is_itemised_export_row(sheet_name, Study_Arm)
+    ) |>
     distinct(sheet_name, Visit, Activity, row_id, staff_group, Study_Arm) |>
     mutate(edge_key = paste0("EDGE-", str_pad(
       row_number() + nrow(special_keys), width = 4, pad = "0"
     )))
   
   main_keys <- data |>
-    filter(!sheet_name %in% .SPECIAL_SHEETS, !Study_Arm %in% .ITEMISED_ARMS) |>
+    filter(
+      !sheet_name %in% .SPECIAL_SHEETS,
+      !is_itemised_export_row(sheet_name, Study_Arm)
+    ) |>
     distinct(Study_Arm, Visit) |>
     mutate(edge_key = paste0("EDGE-", str_pad(
       row_number() + nrow(special_keys) + nrow(itemised_keys), width = 4, pad = "0"

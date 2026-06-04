@@ -97,6 +97,14 @@ run_test_result("test_ca_queries.R", run_ca_query_tests)
 source(file.path(repo_dir, "R/tests/test_ca_chunk3.R"), local = FALSE)
 run_test_result("test_ca_chunk3.R", run_ca_chunk3_tests)
 
+source(file.path(repo_dir, "R/modules/edge_builder_mod.R"), local = FALSE)
+source(file.path(repo_dir, "R/tests/test_edge_builder_module.R"), local = FALSE)
+run_test_result("test_edge_builder_module.R", run_edge_builder_module_tests)
+
+source(file.path(repo_dir, "R/modules/step2_mod.R"), local = FALSE)
+source(file.path(repo_dir, "R/tests/test_step2_filters.R"), local = FALSE)
+run_test_result("test_step2_filters.R", run_step2_filter_tests)
+
 source(file.path(repo_dir, "R/tests/test_contract_cost_source_of_truth.R"), local = FALSE)
 run_test_result("test_contract_cost_source_of_truth.R", run_contract_cost_source_of_truth_tests)
 

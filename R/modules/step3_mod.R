@@ -37,10 +37,26 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
       observe({
         req(shared_state$current_step == "step3")
         req(shared_state$processed_ict)
+
+        posting_ict <- tryCatch({
+          duplicate_screening_failure_sheets(
+            shared_state$processed_ict,
+            include_screening_failure = isTRUE(shared_state$include_screening_failure)
+          )
+        }, error = function(e) {
+          app_log_exception("step3", "Screening failure source duplication failed", e, list(
+            cpms_id = shared_state$cpms_id,
+            include_screening_failure = isTRUE(shared_state$include_screening_failure)
+          ))
+          showNotification("Failed to prepare Screening Failure rows", type = "error")
+          return(NULL)
+        })
+
+        req(posting_ict)
         
         df <- tryCatch({
           prepare_posting_input(
-            ict           = shared_state$processed_ict,
+            ict           = posting_ict,
             ict_db_path   = DB_DIR,
             scenario_id   = shared_state$scenario_id,
           )
@@ -61,6 +77,8 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
           showNotification("Failed to generate posting plan", type = "error")
           return(NULL)
         })
+
+        df <- prepare_screening_failure_posting_input(df)
         
         # assign processed data to sys shared state
         req(df)

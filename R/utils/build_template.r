@@ -267,7 +267,6 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   
   .SPECIAL_SHEETS <- c("Unscheduled Activities", "Setup & Closedown", "Pharmacy")
   .CUSTOM_SHEET   <- "Custom Activities"
-  .ITEMISED_ARMS  <- c("SSP")
   # NOTE: new variables may need to be added in the future - this function should be param
   
   .EDGE_COLS <- c(
@@ -350,6 +349,42 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
       ) |>
       select(all_of(.EDGE_COLS))
   }
+
+  .build_screening <- function(df) {
+    df |>
+      summarise(
+        total = sum(adjusted_amount, na.rm = TRUE),
+        .by   = c(sheet_name, Visit, Visit_Label, Activity, row_id, staff_group, edge_key, study_name, cpms_id)
+      ) |>
+      left_join(
+        visit_labels_lookup,
+        by = c("study_name" = "Study", "Visit" = "Visit_Number")
+      ) |>
+      arrange(Visit, row_id, staff_group) |>
+      mutate(
+        Visit_Label = resolve_visit_label(Visit, Visit_Label, visit_label_lookup),
+        `EDGE Project ID`                                      = edge_id,
+        `Template Name`                                        = sheet_name,
+        `Template Level (Project | Participant | ProjectSite)` = NA,
+        `Project Arm (Participant only)`                       = sheet_name,
+        `Project Site Name (ProjectSite only)`                 = NA,
+        `Cost Item Description`                                = paste0(
+          format_visit_prefix(Visit, Visit_Label),
+          " - ",
+          str_replace_all(Activity, "\\.", " ")
+        ),
+        `Analysis Code`                                        = edge_key,
+        `Cost Category`                                        = "Research Cost",
+        `Default Cost`                                         = total,
+        `Currency`                                             = "GBP",
+        `Department`                                           = NA,
+        `Overhead Cost`                                        = NA,
+        `Time`                                                 = NA,
+        `Activity Type`                                        = NA
+      ) |>
+      select(-visit_label_lookup) |>
+      select(all_of(.EDGE_COLS))
+  }
   
   # ── ADDON ── Build custom-activity rows in the chosen Study_Arm template ──
   # Custom rows are user-added activities that should appear inside the
@@ -395,8 +430,8 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
       return(empty_edge_template)
     }
 
-    itemised_rows <- df |> filter(Study_Arm %in% .ITEMISED_ARMS)
-    visit_rows    <- df |> filter(!Study_Arm %in% .ITEMISED_ARMS)
+    itemised_rows <- df |> filter(is_itemised_export_row(sheet_name, Study_Arm))
+    visit_rows    <- df |> filter(!is_itemised_export_row(sheet_name, Study_Arm))
     scheduled_visit_sequence <- visit_rows |>
       distinct(Visit) |>
       mutate(
@@ -509,6 +544,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   # ── Dispatch and return ───────────────────────────────────────────────────────
   
   special_data <- data |> filter(sheet_name %in% .SPECIAL_SHEETS)
+  screening_data <- data |> filter(is_screening_failure_sheet(sheet_name))
   
   # Main data = everything that isn't a "special sheet" AND isn't custom,
   # plus Pharmacy (which appears in both buckets historically).
@@ -516,10 +552,11 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   main_data <- data |> 
     filter(
       (!sheet_name %in% .SPECIAL_SHEETS | sheet_name == "Pharmacy") &
-        sheet_name != .CUSTOM_SHEET
+        sheet_name != .CUSTOM_SHEET &
+        !is_screening_failure_sheet(sheet_name)
     ) |>
     mutate(
-      template_arm = if_else(Study_Arm %in% .ITEMISED_ARMS, sheet_name, Study_Arm)
+      template_arm = resolve_edge_template_arm(sheet_name, Study_Arm)
     )
   
   custom_data <- data |> filter(sheet_name == .CUSTOM_SHEET)
@@ -529,6 +566,15 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
       group_by(sheet_name) |>
       group_map(~ .build_special(.x), .keep = TRUE) |>
       setNames(sort(unique(special_data$sheet_name)))
+  } else {
+    list()
+  }
+
+  screening_list <- if (nrow(screening_data) > 0) {
+    screening_data |>
+      group_by(sheet_name) |>
+      group_map(~ .build_screening(.x), .keep = TRUE) |>
+      setNames(sort(unique(screening_data$sheet_name)))
   } else {
     list()
   }
@@ -564,5 +610,5 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   }
   # ──────────────────────────────────────────────────────────────────────────
   
-  c(special_list, main_list)
+  c(special_list, screening_list, main_list)
 }

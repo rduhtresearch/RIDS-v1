@@ -5,7 +5,6 @@ suppressPackageStartupMessages(library(dplyr))
 adjust_posting_lines <- function(out) {
   
   .ADJUSTMENT_SPECIAL <- c("Unscheduled Activities", "Setup & Closedown")
-  .ITEMISED_ARMS      <- c("SSP")
   
   .adjust <- function(df, group_vars) {
     if (nrow(df) == 0) return(df)
@@ -47,13 +46,20 @@ adjust_posting_lines <- function(out) {
       .adjust(c("row_id", "Activity", "staff_group", "scenario_id")),
 
     out %>%
-      filter(!sheet_name %in% .ADJUSTMENT_SPECIAL, Study_Arm %in% .ITEMISED_ARMS) %>%
+      filter(
+        !sheet_name %in% .ADJUSTMENT_SPECIAL,
+        is_itemised_adjustment_row(Study_Arm)
+      ) %>%
       .adjust(c("row_id", "Activity", "staff_group", "scenario_id")),
     
     out %>%
-      filter(!sheet_name %in% .ADJUSTMENT_SPECIAL, !Study_Arm %in% .ITEMISED_ARMS) %>%
-      # Group scheduled rows by Study_Arm so SSP is adjusted independently
-      # from the main scheduled arm at the same visit.
+      filter(
+        !sheet_name %in% .ADJUSTMENT_SPECIAL,
+        !is_itemised_adjustment_row(Study_Arm)
+      ) %>%
+      # Group scheduled rows by arm/visit. Screening Failure rows reach this
+      # branch with Study_Arm set to their synthetic sheet name, so their
+      # itemised output still reconciles to the duplicated visit total.
       mutate(adj_group = trimws(coalesce(Study_Arm, sheet_name))) %>%
       .adjust(c("adj_group", "Visit", "scenario_id")) %>%
       select(-adj_group)
