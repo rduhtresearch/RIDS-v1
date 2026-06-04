@@ -38,7 +38,12 @@ appServer <- function(id, auth_state, current_step) {
       library_refresh = 0L
     )
 
-    session$userData$reset_app_state <- function() {
+    session$userData$reset_app_state <- function(reset_library_refresh = TRUE) {
+      current_library_refresh <- isolate(shared_state$library_refresh)
+      if (is.null(current_library_refresh) || is.na(current_library_refresh)) {
+        current_library_refresh <- 0L
+      }
+
       shared_state$scenario_id <- NULL
       shared_state$study_site <- NULL
       shared_state$edge_id <- NULL
@@ -54,7 +59,7 @@ appServer <- function(id, auth_state, current_step) {
       shared_state$current_step <- NULL
       shared_state$timestamp <- NULL
       shared_state$current_study <- NULL
-      shared_state$library_refresh <- 0L
+      shared_state$library_refresh <- if (isTRUE(reset_library_refresh)) 0L else current_library_refresh
       current_step(NULL)
     }
     

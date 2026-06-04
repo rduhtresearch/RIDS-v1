@@ -38,6 +38,18 @@ edge_cols <- c(
   "Time"
 )
 
+format_full_visit_name <- function(visit, visit_label) {
+  clean_visit <- str_squish(str_replace_all(visit, "\\.", " "))
+  clean_label <- str_squish(str_replace_all(visit_label, "\\.", " "))
+
+  case_when(
+    is.na(clean_label) | clean_label == "" ~ clean_visit,
+    clean_label == clean_visit ~ clean_visit,
+    str_detect(clean_label, "^VISIT\\s*-\\s*\\d{3}\\b") ~ clean_label,
+    TRUE ~ paste(clean_visit, clean_label, sep = " - ")
+  )
+}
+
 # ── Cost adjustment ────────────────────────────────────────────────────────────
 
 # Core adjustment logic: scales posting lines so they sum to the Step 2 saved
@@ -172,7 +184,7 @@ build_edge_template_main <- function(data) {
     ) |>
     left_join(visit_keys, by = c("Study_Arm", "Visit")) |>
     mutate(
-      Full_Visit_Name                                        = paste0("VISIT - ", str_replace_all(Visit_Label, "\\.", " ")),
+      Full_Visit_Name                                        = format_full_visit_name(Visit, Visit_Label),
       `EDGE Project ID`                                      = NA,
       `Template Name`                                        = Study_Arm,
       `Template Level (Project | Participant | ProjectSite)` = "Participant",

@@ -24,6 +24,11 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
         html = build_loading_state_overlay("Running cost adjustment engine"),
         color = "transparent"
       )
+      is_saved <- reactiveVal(FALSE)
+      
+      observe({
+        shinyjs::toggleState("next_step", condition = isTRUE(is_saved()))
+      })
       
       # declare reactive val for data
       working_data = reactiveValues(df = NULL)
@@ -41,6 +46,14 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
           )
     
         }, error = function(e){
+          if (handle_fatal_db_error(session, e, "step3", list(
+            cpms_id = shared_state$cpms_id,
+            scenario_id = shared_state$scenario_id,
+            stage = "prepare_posting_input"
+          ))) {
+            return(NULL)
+          }
+
           app_log_exception("step3", "Posting input preparation failed", e, list(
             cpms_id = shared_state$cpms_id,
             scenario_id = shared_state$scenario_id
@@ -54,6 +67,7 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
         df$study_site <- shared_state$study_site
         working_data$df <- df
         shared_state$posting_plan <- df
+        is_saved(FALSE)
       })
       
       # render table
@@ -136,6 +150,7 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
           )
         )
         updateReactable("table", data = working_data$df)
+        is_saved(FALSE)
       })
       
       # save updates
@@ -166,6 +181,17 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
             scenario_id = "A"
           )
         }, error = function(e) {
+          if (handle_fatal_db_error(session, e, "step3", list(
+            cpms_id = shared_state$cpms_id,
+            upload_id = shared_state$upload_id,
+            rows = nrow(working_data$df),
+            stage = "evaluate_posting_plan"
+          ))) {
+            is_saved(FALSE)
+            w$hide()
+            return(NULL)
+          }
+
           app_log_exception("step3", "Posting evaluation failed", e, list(
             cpms_id = shared_state$cpms_id,
             upload_id = shared_state$upload_id,
@@ -186,6 +212,7 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
             )
           )
           showNotification("Failed to evaluate posting plan", type = "error")
+          is_saved(FALSE)
           w$hide()
           return(NULL)
         })
@@ -208,6 +235,7 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
         )
         app_log_info("step3", "Posting evaluation completed")
         
+        is_saved(TRUE)
         showNotification("Tags saved", type = "message", duration = 5)
       })
       

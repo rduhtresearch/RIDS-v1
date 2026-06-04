@@ -10,7 +10,7 @@ sidebarServer <- function(id, auth_state, parent_session, current_step) {
     observeEvent(input$new_ict, {
       current_step("step1")
     })
-    
+
     observeEvent(input$new_ict, {
       current_step("step1")
       shinyjs::runjs('$("[data-value=\'tab_step1\']").tab("show")')
@@ -103,7 +103,7 @@ sidebarServer <- function(id, auth_state, parent_session, current_step) {
         auth_state$logged_in <- FALSE
       }
     })
-    
+
     observeEvent(input$new_ict, {
       shinyjs::runjs('$("[data-value=\'tab_step1\']").tab("show")')
       shinyjs::runjs("$('body').addClass('sidebar-collapse')")

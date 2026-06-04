@@ -83,3 +83,25 @@ Shiny.addCustomMessageHandler("clearAuthCookie", function(payload) {
 Shiny.addCustomMessageHandler("requestAuthCookie", function(payload) {
   window.requestRidsAuthToken(payload.inputId, payload.name);
 });
+
+Shiny.addCustomMessageHandler("resetFileInput", function(payload) {
+  if (!payload || !payload.id) {
+    return;
+  }
+
+  var input = document.getElementById(payload.id);
+
+  if (!input) {
+    return;
+  }
+
+  input.value = "";
+
+  if (window.jQuery) {
+    window.jQuery(input).trigger("change");
+    window.jQuery(input)
+      .closest(".custom-file")
+      .find(".custom-file-label")
+      .text("Choose Excel File");
+  }
+});

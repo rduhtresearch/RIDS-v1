@@ -235,6 +235,34 @@ suppressPackageStartupMessages({
   library(stringr)
 })
 
+resolve_visit_label <- function(visit, visit_label, visit_label_lookup) {
+  visit_text <- str_squish(str_replace_all(visit, "\\.", " "))
+  label_text <- str_squish(str_replace_all(visit_label, "\\.", " "))
+  lookup_text <- str_squish(str_replace_all(visit_label_lookup, "\\.", " "))
+
+  dplyr::case_when(
+    is.na(label_text) | label_text == "" ~ lookup_text,
+    label_text == visit_text & !is.na(lookup_text) & lookup_text != "" ~ lookup_text,
+    TRUE ~ label_text
+  )
+}
+
+format_visit_prefix <- function(visit, visit_label) {
+  visit_text <- str_squish(str_replace_all(visit, "\\.", " "))
+  label_text <- str_squish(str_replace_all(visit_label, "\\.", " "))
+
+  dplyr::case_when(
+    is.na(label_text) | label_text == "" ~ visit_text,
+    str_starts(label_text, fixed(visit_text)) ~ label_text,
+    TRUE ~ paste0(visit_text, " - ", label_text)
+  )
+}
+
+visit_sort_key <- function(visit) {
+  visit_num <- suppressWarnings(as.integer(str_match(visit, "VISIT\\s*-\\s*(\\d+)")[, 2]))
+  if_else(is.na(visit_num), seq_along(visit), visit_num)
+}
+
 build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   
   .SPECIAL_SHEETS <- c("Unscheduled Activities", "Setup & Closedown", "Pharmacy")
@@ -369,6 +397,30 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
 
     itemised_rows <- df |> filter(Study_Arm %in% .ITEMISED_ARMS)
     visit_rows    <- df |> filter(!Study_Arm %in% .ITEMISED_ARMS)
+    scheduled_visit_sequence <- visit_rows |>
+      distinct(Visit) |>
+      mutate(
+        row_type = "scheduled",
+        visit_sort = visit_sort_key(Visit)
+      ) |>
+      arrange(visit_sort, Visit) |>
+      mutate(display_visit = paste0("VISIT - ", str_pad(row_number(), 3, pad = "0"))) |>
+      select(Visit, row_type, display_visit)
+
+    itemised_visit_sequence <- itemised_rows |>
+      distinct(Visit) |>
+      mutate(
+        row_type = "itemised",
+        visit_sort = visit_sort_key(Visit)
+      ) |>
+      arrange(visit_sort, Visit) |>
+      mutate(
+        display_visit = paste0(
+          "VISIT - ",
+          str_pad(row_number() + nrow(scheduled_visit_sequence), 3, pad = "0")
+        )
+      ) |>
+      select(Visit, row_type, display_visit)
 
     itemised_built <- if (nrow(itemised_rows) > 0) {
       itemised_rows |>
@@ -376,25 +428,17 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
           total = sum(adjusted_amount, na.rm = TRUE),
           .by   = c(study_name, Visit, Study_Arm, Visit_Label, Activity, row_id, staff_group, edge_key)
         ) |>
+        mutate(row_type = "itemised") |>
+        left_join(itemised_visit_sequence, by = c("Visit", "row_type")) |>
         left_join(
           visit_labels_lookup,
           by = c("study_name" = "Study", "Visit" = "Visit_Number")
         ) |>
         arrange(Visit, row_id, staff_group) |>
         mutate(
-          Visit_Label = coalesce(Visit_Label, visit_label_lookup),
-          visit_text = str_replace_all(Visit, "\\.", " "),
-          visit_label_text = str_replace_all(Visit_Label, "\\.", " "),
+          Visit_Label = resolve_visit_label(Visit, Visit_Label, visit_label_lookup),
           item_text = str_replace_all(Activity, "\\.", " "),
-          visit_prefix = if_else(
-            is.na(visit_label_text) | visit_label_text == "",
-            visit_text,
-            if_else(
-              str_starts(visit_label_text, fixed(visit_text)),
-              visit_label_text,
-              paste0(visit_text, " - ", visit_label_text)
-            )
-          ),
+          visit_prefix = format_visit_prefix(display_visit, Visit_Label),
           `EDGE Project ID`                                      = edge_id,
           `Template Name`                                        = template_name,
           `Template Level (Project | Participant | ProjectSite)` = NA,
@@ -410,6 +454,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
           `Time`                                                 = NA,
           `Activity Type`                                        = NA
         ) |>
+        select(-row_type) |>
         select(-visit_label_lookup) |>
         select(all_of(.EDGE_COLS))
     } else {
@@ -426,6 +471,8 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
           total = sum(adjusted_amount, na.rm = TRUE),
           .by   = c(study_name, Visit, Study_Arm, Visit_Label)
         ) |>
+        mutate(row_type = "scheduled") |>
+        left_join(scheduled_visit_sequence, by = c("Visit", "row_type")) |>
         left_join(visit_keys, by = c("Study_Arm", "Visit")) |>
         left_join(
           visit_labels_lookup,
@@ -433,15 +480,13 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
         ) |>
         arrange(Visit) |>
         mutate(
-          Visit_Label = coalesce(Visit_Label, visit_label_lookup),
+          Visit_Label = resolve_visit_label(Visit, Visit_Label, visit_label_lookup),
           `EDGE Project ID`                                      = edge_id,
           `Template Name`                                        = template_name,
           `Template Level (Project | Participant | ProjectSite)` = NA,
           `Project Arm (Participant only)`                       = NA,
           `Project Site Name (ProjectSite only)`                 = NA,
-          `Cost Item Description`                                = paste0(
-            Visit, " - ", str_replace_all(Visit_Label, "\\.", " ")
-          ),
+          `Cost Item Description`                                = format_visit_prefix(display_visit, Visit_Label),
           `Analysis Code`                                        = edge_key,
           `Cost Category`                                        = "Research Cost",
           `Default Cost`                                         = total,
@@ -451,6 +496,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
           `Time`                                                 = NA,
           `Activity Type`                                        = NA
         ) |>
+        select(-row_type) |>
         select(-visit_label_lookup) |>
         select(all_of(.EDGE_COLS))
     } else {

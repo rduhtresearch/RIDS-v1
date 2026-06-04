@@ -617,26 +617,6 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     templates <- reactiveVal(NULL)
     zip_path  <- reactiveVal(NULL)
     
-    # ── Reset helper for shared_state ──────────────────────────────────────────
-    reset_shared_state <- function() {
-      shared_state$scenario_id      <- NULL
-      shared_state$study_site       <- NULL
-      shared_state$edge_id          <- NULL
-      shared_state$cpms_id          <- NULL
-      shared_state$study_name       <- NULL
-      shared_state$filename         <- NULL
-      shared_state$upload_meta      <- NULL
-      shared_state$raw_ict          <- NULL
-      shared_state$posting_plan     <- NULL
-      shared_state$processed_ict    <- NULL
-      shared_state$evaluated_plan   <- NULL
-      shared_state$edge_templates   <- NULL
-      shared_state$speciality_id    <- NULL
-      shared_state$speciality_name  <- NULL
-      shared_state$current_step     <- NULL
-      shared_state$timestamp        <- NULL
-    }
-    
     templates <- reactiveVal(NULL)
     zip_path  <- reactiveVal(NULL)
     
@@ -756,10 +736,40 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         message = "Template generation started",
         details = list(scenario_id = shared_state$scenario_id)
       )
+
+      edge_export_input <- tryCatch({
+        duplicate_screening_failure_rows(
+          shared_state$evaluated_plan,
+          include_screening_failure = isTRUE(shared_state$include_screening_failure)
+        )
+      }, error = function(e) {
+        app_log_exception("step4", "Screening failure duplication failed", e, list(
+          cpms_id = shared_state$cpms_id,
+          include_screening_failure = isTRUE(shared_state$include_screening_failure)
+        ))
+        showNotification(
+          paste("Failed to prepare Screening Failure rows:", conditionMessage(e)),
+          type = "error",
+          duration = 10
+        )
+        w$hide()
+        return(NULL)
+      })
+
+      req(edge_export_input)
       
       adjusted <- tryCatch({
-        adjust_posting_lines(shared_state$evaluated_plan)
+        adjust_posting_lines(edge_export_input)
       }, error = function(e) {
+        if (handle_fatal_db_error(session, e, "step4", list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          stage = "adjust_posting_lines"
+        ))) {
+          w$hide()
+          return(NULL)
+        }
+
         app_log_exception("step4", "Adjust posting lines failed", e, list(
           cpms_id = shared_state$cpms_id,
           upload_id = shared_state$upload_id
@@ -816,6 +826,14 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       adjusted <- tryCatch({
         apply_custom_activities(adjusted, shared_state)
       }, error = function(e) {
+        if (handle_fatal_db_error(session, e, "step4", list(
+          cpms_id = shared_state$cpms_id,
+          stage = "custom_activity_merge"
+        ))) {
+          w$hide()
+          return(NULL)
+        }
+
         app_log_exception("step4", "Custom activity merge failed", e, list(
           cpms_id = shared_state$cpms_id
         ))
@@ -827,8 +845,10 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         return(adjusted)   # fall back to pipeline-only output
       })
       # ──────────────────────────────────────────────────────────────────────
+
+      req(adjusted)
       
-      tryCatch({
+      persisted_ok <- tryCatch({
         dbExecute(CON,
                   paste(
                     "DELETE FROM posting_lines",
@@ -842,7 +862,18 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
           message = "Posting lines saved",
           details = list(rows = nrow(adjusted))
         )
+        TRUE
       }, error = function(e) {
+        if (handle_fatal_db_error(session, e, "step4", list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          rows = nrow(adjusted),
+          stage = "posting_lines_persist"
+        ))) {
+          w$hide()
+          return(FALSE)
+        }
+
         app_log_exception("step4", "Posting lines persistence failed", e, list(
           cpms_id = shared_state$cpms_id,
           upload_id = shared_state$upload_id,
@@ -858,7 +889,13 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
           )
         )
         showNotification("Failed to save posting lines", type = "error")
+        FALSE
       })
+
+      if (!isTRUE(persisted_ok)) {
+        w$hide()
+        return(NULL)
+      }
       
       tmpl <- tryCatch({
         
@@ -877,6 +914,16 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         templates <- build_all_edge_templates(adjusted, visit_lookup, shared_state$upload_meta$edge_id)
         
       }, error = function(e) {
+        if (handle_fatal_db_error(session, e, "step4", list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          rows = nrow(adjusted),
+          stage = "template_build"
+        ))) {
+          w$hide()
+          return(NULL)
+        }
+
         app_log_exception("step4", "EDGE template build failed", e, list(
           cpms_id = shared_state$cpms_id,
           upload_id = shared_state$upload_id,
@@ -902,7 +949,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       
       # Initial ZIP write — uses original templates (user hasn't touched yet).
       # The download handler regenerates from edited_templates() on click.
-      tryCatch({
+      zip_saved_ok <- tryCatch({
         timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
         zip_name  <- paste0(
           shared_state$cpms_id,
@@ -938,8 +985,19 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
             zip_name = zip_name
           )
         )
+        TRUE
         
       }, error = function(e) {
+        if (handle_fatal_db_error(session, e, "step4", list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          template_count = length(tmpl),
+          stage = "zip_generation"
+        ))) {
+          w$hide()
+          return(FALSE)
+        }
+
         app_log_exception("step4", "ZIP generation failed", e, list(
           cpms_id = shared_state$cpms_id,
           upload_id = shared_state$upload_id,
@@ -955,7 +1013,13 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
           )
         )
         showNotification("Failed to save ZIP", type = "error")
+        FALSE
       })
+
+      if (!isTRUE(zip_saved_ok)) {
+        w$hide()
+        return(NULL)
+      }
       
       updateSelectInput(session, "arm_select", choices = names(tmpl))
       app_log_info("step4", "Template generation completed")
@@ -1042,8 +1106,14 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
           current_refresh <- isolate(shared_state$library_refresh)
           if (is.null(current_refresh) || is.na(current_refresh)) current_refresh <- 0L
           shared_state$library_refresh <- current_refresh + 1L
-          reset_shared_state()
-          current_step(NULL)
+          if (is.function(session$userData$reset_app_state)) {
+            invoke_reset_app_state(
+              session$userData$reset_app_state,
+              reset_library_refresh = FALSE
+            )
+          } else {
+            current_step(NULL)
+          }
           shinyjs::runjs('$("a[data-value=\'tab_library\']").trigger("click")')
           shinyjs::runjs("$('body').addClass('sidebar-collapse')")
         })
