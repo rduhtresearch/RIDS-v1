@@ -11,6 +11,22 @@ get_app_session <- function(session) {
   session
 }
 
+invoke_reset_app_state <- function(reset_fn, reset_library_refresh = TRUE) {
+  if (!is.function(reset_fn)) {
+    return(invisible(FALSE))
+  }
+
+  reset_formals <- tryCatch(names(formals(reset_fn)), error = function(e) NULL)
+
+  if (!is.null(reset_formals) && "reset_library_refresh" %in% reset_formals) {
+    reset_fn(reset_library_refresh = reset_library_refresh)
+  } else {
+    reset_fn()
+  }
+
+  invisible(TRUE)
+}
+
 is_fatal_db_error <- function(error) {
   msg <- tolower(trimws(conditionMessage(error) %||% ""))
   if (!nzchar(msg)) {
@@ -48,13 +64,12 @@ handle_fatal_db_error <- function(session,
       removeModal(session = session)
       app_session$userData$fatal_db_modal_active <- FALSE
 
-      if (is.function(app_session$userData$reset_app_state)) {
-        app_session$userData$reset_app_state(
-          reset_library_refresh = isTRUE(
-            app_session$userData$fatal_db_reset_library_refresh
-          )
+      invoke_reset_app_state(
+        app_session$userData$reset_app_state,
+        reset_library_refresh = isTRUE(
+          app_session$userData$fatal_db_reset_library_refresh
         )
-      }
+      )
 
       updateTabItems(app_session, "sidebar", selected = "tab_dashboard")
     }, ignoreInit = TRUE)
