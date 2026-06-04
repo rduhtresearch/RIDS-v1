@@ -2,15 +2,20 @@ library(tidyverse)
 library(writexl)
 
 # Speciality cost centre
-speciality_code = '61105'
+speciality_code = '58109'
 
 # File paths
 #df <- read_csv('/Users/tategraham/Downloads/Book7(Sheet1).csv')
-df <- read_csv("/Users/tategraham/Downloads/Book8(Sheet1)-2.csv")
+#df <- read_csv("/Users/tategraham/Downloads/Book8(Sheet1)-2.csv")
+df <- read_csv('/Users/tategraham/Downloads/Book10(Sheet1).csv')
+
 
 #posting_lines <- read_csv("/Users/tategraham/Downloads/75743_RDUHT_test_posting_lines_20260601_163338.csv")
 #posting_lines <- read_csv('/Users/tategraham/Downloads/66795_RDUHT_Gusto_posting_lines_20260602_104238(in).csv')
-posting_lines <- read_csv("/Users/tategraham/Downloads/66795_NDDHT_t_posting_lines_20260603_155312.csv")
+#posting_lines <- read_csv("/Users/tategraham/Downloads/66795_NDDHT_t_posting_lines_20260603_155312.csv")
+#posting_lines <- read_csv("/Users/tategraham/Downloads/58449_NDDHT_test5_posting_lines_20260604_150208.csv")
+#posting_lines <- read_csv("/Users/tategraham/Downloads/58449_RDUHT_test_posting_lines_20260604_160630.csv")
+posting_lines <- read_csv("/Users/tategraham/Downloads/58449_RDUHT_test_posting_lines_20260604_161726.csv")
 
 
 
@@ -28,6 +33,7 @@ df <- df |> rename(
   'INDIRECT_50_DELIVERY' = INDIRECT_50,
   'CAPACITY_RD'          = RD_CAPACITY
 )
+
 
 # Transpose data to create row per split type
 df_long <- df %>%

@@ -1,3 +1,53 @@
+edge_builder_normalize_department <- function(values) {
+  if (is.null(values)) return(character(0))
+
+  vals <- as.character(values)
+  vals <- trimws(vals)
+  vals[vals == ""] <- NA_character_
+  vals
+}
+
+edge_builder_compute_movable <- function(tpls) {
+  names(tpls)[vapply(tpls, function(d) {
+    if (!"Department" %in% names(d)) return(FALSE)
+    any(!is.na(edge_builder_normalize_department(d$Department)))
+  }, logical(1))]
+}
+
+edge_builder_can_move_from <- function(active, movable) {
+  !is.null(active) && nzchar(active) && active %in% movable
+}
+
+edge_builder_move_target_choices <- function(active, movable, new_sentinel) {
+  if (!edge_builder_can_move_from(active, movable)) return(character(0))
+
+  existing_targets <- setdiff(movable, active)
+  choices <- stats::setNames(existing_targets, existing_targets)
+  c(choices, stats::setNames(new_sentinel, "+ New template..."))
+}
+
+edge_builder_validate_new_name <- function(raw, existing_names) {
+  if (is.null(raw)) return(list(valid = FALSE, msg = NULL))
+
+  trimmed <- trimws(raw)
+  if (trimmed == "")            return(list(valid = FALSE, msg = "Required"))
+  if (trimmed %in% existing_names) {
+    return(list(valid = FALSE, msg = "Name already used"))
+  }
+  if (nchar(trimmed) > 60)      return(list(valid = FALSE, msg = "Too long (max 60 chars)"))
+
+  list(valid = TRUE, msg = NULL, name = trimmed)
+}
+
+edge_builder_move_rows <- function(templates, source, target, indices) {
+  moving <- templates[[source]][indices, , drop = FALSE]
+  moving$`Template Name` <- target
+
+  templates[[source]] <- templates[[source]][-indices, , drop = FALSE]
+  templates[[target]] <- bind_rows(templates[[target]], moving)
+  templates
+}
+
 edgeBuilderUI <- function(id) {
   ns <- NS(id)
   
@@ -48,34 +98,10 @@ edgeBuilderServer <- function(id, edge_templates) {
     )
     
     # ── Helpers ──────────────────────────────────────────────────────────────
-    compute_movable <- function(tpls) {
-      names(tpls)[vapply(tpls, function(d) {
-        "Department" %in% names(d) && any(!is.na(d$Department))
-      }, logical(1))]
-    }
-    
-    is_movable <- function(nm) nm %in% rv$movable
-    
-    move_rows <- function(source, target, indices) {
-      moving <- rv$templates[[source]][indices, , drop = FALSE]
-      moving$`Template Name` <- target
-      
-      new_templates <- rv$templates
-      new_templates[[source]] <- new_templates[[source]][-indices, , drop = FALSE]
-      new_templates[[target]] <- bind_rows(new_templates[[target]], moving)
-      
-      rv$templates <- new_templates
-    }
+    is_movable <- function(nm) edge_builder_can_move_from(nm, rv$movable)
     
     new_name_validity <- reactive({
-      raw <- input$new_template_name
-      if (is.null(raw)) return(list(valid = FALSE, msg = NULL))
-      
-      trimmed <- trimws(raw)
-      if (trimmed == "")                    return(list(valid = FALSE, msg = "Required"))
-      if (trimmed %in% names(rv$templates)) return(list(valid = FALSE, msg = "Name already used"))
-      if (nchar(trimmed) > 60)              return(list(valid = FALSE, msg = "Too long (max 60 chars)"))
-      list(valid = TRUE, msg = NULL, name = trimmed)
+      edge_builder_validate_new_name(input$new_template_name, names(rv$templates))
     })
     
     # ── Initialise from upstream ─────────────────────────────────────────────
@@ -85,7 +111,7 @@ edgeBuilderServer <- function(id, edge_templates) {
       
       rv$original  <- tpls
       rv$templates <- tpls
-      rv$movable   <- compute_movable(tpls)
+      rv$movable   <- edge_builder_compute_movable(tpls)
       
       if (is.null(rv$active) || !(rv$active %in% names(tpls))) {
         rv$active <- if (length(rv$movable) > 0) rv$movable[1] else names(tpls)[1]
@@ -260,10 +286,11 @@ edgeBuilderServer <- function(id, edge_templates) {
     observeEvent(input$move_selected, {
       req(length(rv$selected) > 0, rv$active, rv$templates, is_movable(rv$active))
       
-      existing_targets <- setdiff(rv$movable, rv$active)
-      
-      target_choices        <- c(existing_targets, NEW_SENTINEL)
-      names(target_choices) <- c(existing_targets, "+ New template...")
+      target_choices <- edge_builder_move_target_choices(
+        active = rv$active,
+        movable = rv$movable,
+        new_sentinel = NEW_SENTINEL
+      )
       
       showModal(modalDialog(
         title = paste0("Move ", length(rv$selected), " rows to..."),
@@ -272,7 +299,8 @@ edgeBuilderServer <- function(id, edge_templates) {
           label   = "Target template",
           choices = target_choices
         ),
-        shinyjs::hidden(
+        conditionalPanel(
+          condition = sprintf("input['%s'] === '%s'", ns("move_target"), NEW_SENTINEL),
           div(
             id = ns("new_name_wrap"),
             textInput(ns("new_template_name"), "New template name", value = "")
@@ -283,11 +311,6 @@ edgeBuilderServer <- function(id, edge_templates) {
           actionButton(ns("confirm_move"), "Confirm", class = "btn-primary")
         )
       ))
-    })
-    
-    observe({
-      req(input$move_target)
-      shinyjs::toggle("new_name_wrap", condition = input$move_target == NEW_SENTINEL)
     })
     
     observe({
@@ -326,7 +349,7 @@ edgeBuilderServer <- function(id, edge_templates) {
         rv$templates[[new_name]] <- rv$templates[[source]][0, ]
         rv$movable <- c(rv$movable, new_name)
         
-        move_rows(source, new_name, indices)
+        rv$templates <- edge_builder_move_rows(rv$templates, source, new_name, indices)
         
         rv$active   <- new_name
         rv$selected <- integer(0)
@@ -338,7 +361,7 @@ edgeBuilderServer <- function(id, edge_templates) {
         )
       } else {
         target <- input$move_target
-        move_rows(source, target, indices)
+        rv$templates <- edge_builder_move_rows(rv$templates, source, target, indices)
         
         rv$selected <- integer(0)
         removeModal()

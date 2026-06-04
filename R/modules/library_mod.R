@@ -168,6 +168,7 @@ libraryServer <- function(id, auth_state, shared_state) {
     ns <- session$ns
     page_size <- 24L
     visible_count <- reactiveVal(page_size)
+    pending_delete <- reactiveVal(NULL)
 
     fetch_studies <- function() {
       DBI::dbGetQuery(
@@ -194,6 +195,14 @@ libraryServer <- function(id, auth_state, shared_state) {
         study_site = as.character(row$study_site),
         scenario_id = as.character(row$scenario_id)
       )
+    }
+
+    same_study_ref <- function(lhs, rhs) {
+      if (is.null(lhs) || is.null(rhs)) return(FALSE)
+
+      identical(trimws(as.character(lhs$cpms_id)), trimws(as.character(rhs$cpms_id))) &&
+        identical(trimws(as.character(lhs$study_site)), trimws(as.character(rhs$study_site))) &&
+        identical(trimws(as.character(lhs$scenario_id)), trimws(as.character(rhs$scenario_id)))
     }
 
     study_key <- function(cpms_id, study_site, scenario_id) {
@@ -356,6 +365,122 @@ libraryServer <- function(id, auth_state, shared_state) {
 
       selected_study(studies()[row_idx, , drop = FALSE])
     }, ignoreInit = TRUE)
+
+    observeEvent(input$delete_study, {
+      req(input$delete_study)
+
+      row_idx <- match(input$delete_study, studies()$study_key)
+      req(!is.na(row_idx))
+
+      row <- studies()[row_idx, , drop = FALSE]
+      pending_delete(row)
+
+      showModal(modalDialog(
+        title = paste0("Delete ", row$study_name %||% paste0("CPMS ", row$cpms_id), "?"),
+        size = "m",
+        easyClose = FALSE,
+        div(
+          style = "color: #1d2a36; line-height: 1.55;",
+          p("This will permanently delete the selected run from the study library."),
+          tags$ul(
+            tags$li("Upload metadata"),
+            tags$li("ICT costing rows"),
+            tags$li("Posting lines"),
+            tags$li("Custom activities"),
+            tags$li("Saved workbook and generated EDGE ZIP, if present")
+          ),
+          p(
+            style = "margin-bottom: 0.5rem; font-weight: 600; color: #a94442;",
+            "Type DELETE to confirm."
+          ),
+          textInput(ns("delete_confirmation_text"), "Confirmation", value = "", placeholder = "DELETE")
+        ),
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton(ns("confirm_delete_study"), "Delete run", class = "btn-danger")
+        )
+      ))
+    }, ignoreInit = TRUE)
+
+    observe({
+      confirm_ready <- identical(trimws(input$delete_confirmation_text %||% ""), "DELETE")
+      shinyjs::toggleState("confirm_delete_study", condition = confirm_ready)
+    })
+
+    observeEvent(input$confirm_delete_study, {
+      row <- pending_delete()
+      req(row)
+      req(identical(trimws(input$delete_confirmation_text %||% ""), "DELETE"))
+
+      delete_result <- tryCatch({
+        delete_study_run(
+          cpms_id = as.character(row$cpms_id),
+          study_site = as.character(row$study_site),
+          scenario_id = as.character(row$scenario_id)
+        )
+      }, error = function(e) {
+        if (handle_fatal_db_error(session, e, "library", list(
+          cpms_id = row$cpms_id,
+          study_site = row$study_site,
+          scenario_id = row$scenario_id,
+          stage = "delete_study_run"
+        ))) {
+          return(NULL)
+        }
+
+        app_log_exception("library", "Study deletion failed", e, list(
+          cpms_id = row$cpms_id,
+          study_site = row$study_site,
+          scenario_id = row$scenario_id
+        ))
+        showNotification("Failed to delete the selected study run", type = "error", duration = 8)
+        return(NULL)
+      })
+
+      req(delete_result)
+
+      removeModal()
+      pending_delete(NULL)
+
+      if (same_study_ref(shared_state$current_study, build_study_ref(row))) {
+        shared_state$current_study <- NULL
+        shinyjs::runjs('$("a[data-value=\'tab_library\']").trigger("click")')
+      }
+
+      current_refresh <- isolate(shared_state$library_refresh)
+      shared_state$library_refresh <- current_refresh + 1L
+
+      app_log_info("library", "Study run deleted", list(
+        cpms_id = row$cpms_id,
+        study_site = row$study_site,
+        scenario_id = row$scenario_id,
+        rows_deleted = delete_result$total_rows_deleted
+      ))
+
+      showNotification(
+        paste0(
+          "Deleted run for CPMS ",
+          row$cpms_id,
+          " / ",
+          row$study_site,
+          " / Scenario ",
+          row$scenario_id,
+          " (",
+          delete_result$total_rows_deleted,
+          " rows removed)."
+        ),
+        type = "message",
+        duration = 6
+      )
+
+      if (length(delete_result$files$failed) > 0) {
+        showNotification(
+          "Run data was deleted, but one or more saved files could not be removed from disk.",
+          type = "warning",
+          duration = 8
+        )
+      }
+    }, ignoreInit = TRUE)
     
     # ── Open the selected study in the workspace ─────────────────────────────
     observeEvent(selected_study(), {
@@ -436,6 +561,11 @@ libraryServer <- function(id, auth_state, shared_state) {
               auto_unbox = TRUE,
               null = "null"
             )
+            delete_key_json <- jsonlite::toJSON(
+              as.character(row$study_key),
+              auto_unbox = TRUE,
+              null = "null"
+            )
 
             div(
               class = "card",
@@ -488,16 +618,30 @@ libraryServer <- function(id, auth_state, shared_state) {
                   )
                 ),
                 div(
-                  style = "border-top: 1px solid #f0f4f8; padding-top: 0.75rem;",
+                  style = paste(
+                    "border-top: 1px solid #f0f4f8; padding-top: 0.75rem;",
+                    "display: flex; gap: 0.5rem; justify-content: space-between;"
+                  ),
                   actionButton(
                     inputId = ns(paste0("open_study_", i)),
                     label   = tagList(icon("folder-open"), " Open"),
                     class   = "btn btn-sm btn-outline-primary",
-                    style   = "font-size: 0.8rem; font-weight: 600;",
+                    style   = "font-size: 0.8rem; font-weight: 600; flex: 1 1 auto;",
                     onclick = sprintf(
                       "Shiny.setInputValue('%s', %s, {priority: 'event'})",
                       ns("open_study"),
                       open_key_json
+                    )
+                  ),
+                  actionButton(
+                    inputId = ns(paste0("delete_study_", i)),
+                    label   = tagList(icon("trash"), " Delete"),
+                    class   = "btn btn-sm btn-outline-danger",
+                    style   = "font-size: 0.8rem; font-weight: 600;",
+                    onclick = sprintf(
+                      "Shiny.setInputValue('%s', %s, {priority: 'event'})",
+                      ns("delete_study"),
+                      delete_key_json
                     )
                   )
                 )
