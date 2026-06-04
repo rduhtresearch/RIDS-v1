@@ -107,6 +107,93 @@ run_edge_builder_module_tests <- function() {
   .expect("unique new template names are accepted",
           isTRUE(valid_check$valid) && identical(valid_check$name, "Safety Follow-up"))
 
+  cat("\n[ department filter and A/Z sorting ]\n")
+  filter_tpl <- .edge_template(
+    "Setup & Closedown",
+    c("  Radiology  ", "", NA_character_, "Pathology", "Radiology"),
+    c("Zulu scan", "alpha admin", "Echo review", "bravo bloods", "Alpha follow-up")
+  )
+  department_choices <- edge_builder_department_choices(filter_tpl)
+  .expect("department choices include all, sorted departments, and blank department",
+          identical(
+            unname(department_choices),
+            c(EDGE_BUILDER_DEPT_ALL, "Pathology", "Radiology", EDGE_BUILDER_DEPT_NONE)
+          ) &&
+            identical(
+              names(department_choices),
+              c("All departments", "Pathology", "Radiology", "(No department)")
+            ))
+
+  radiology_rows <- edge_builder_filter_sort_rows(
+    filter_tpl,
+    department_filter = "Radiology",
+    sort_order = EDGE_BUILDER_SORT_NONE
+  )
+  .expect("department filter matches trimmed department values",
+          identical(
+            radiology_rows$`Cost Item Description`,
+            c("Zulu scan", "Alpha follow-up")
+          ))
+  .expect("filtered rows retain original source indices",
+          identical(radiology_rows$.edge_builder_source_index, c(1L, 5L)))
+
+  blank_department_rows <- edge_builder_filter_sort_rows(
+    filter_tpl,
+    department_filter = EDGE_BUILDER_DEPT_NONE,
+    sort_order = EDGE_BUILDER_SORT_NONE
+  )
+  .expect("blank department filter includes empty and NA departments",
+          identical(blank_department_rows$.edge_builder_source_index, c(2L, 3L)))
+
+  az_rows <- edge_builder_filter_sort_rows(
+    filter_tpl,
+    department_filter = EDGE_BUILDER_DEPT_ALL,
+    sort_order = EDGE_BUILDER_SORT_ASC
+  )
+  .expect("description A-Z sorting is case-insensitive",
+          identical(
+            az_rows$`Cost Item Description`,
+            c("alpha admin", "Alpha follow-up", "bravo bloods", "Echo review", "Zulu scan")
+          ))
+
+  za_rows <- edge_builder_filter_sort_rows(
+    filter_tpl,
+    department_filter = EDGE_BUILDER_DEPT_ALL,
+    sort_order = EDGE_BUILDER_SORT_DESC
+  )
+  .expect("description Z-A sorting is supported",
+          identical(
+            za_rows$`Cost Item Description`,
+            c("Zulu scan", "Echo review", "bravo bloods", "Alpha follow-up", "alpha admin")
+          ))
+
+  filtered_sorted_rows <- edge_builder_filter_sort_rows(
+    filter_tpl,
+    department_filter = "Radiology",
+    sort_order = EDGE_BUILDER_SORT_ASC
+  )
+  .expect("filter plus sort keeps visible rows mapped to source rows",
+          identical(
+            filtered_sorted_rows$.edge_builder_source_index,
+            c(5L, 1L)
+          ))
+
+  filtered_move_templates <- list(
+    `Setup & Closedown` = filter_tpl,
+    `Safety Follow-up` = filter_tpl[0, , drop = FALSE]
+  )
+  filtered_move <- edge_builder_move_rows(
+    templates = filtered_move_templates,
+    source = "Setup & Closedown",
+    target = "Safety Follow-up",
+    indices = filtered_sorted_rows$.edge_builder_source_index[[1]]
+  )
+  .expect("moving from a filtered/sorted view moves the intended source row",
+          identical(
+            filtered_move$`Safety Follow-up`$`Cost Item Description`,
+            "Alpha follow-up"
+          ))
+
   cat("\n[ row moves into a new tab ]\n")
   templates_for_move <- list(
     `Main Arm` = main_tpl,

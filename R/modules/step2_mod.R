@@ -1,3 +1,79 @@
+STEP2_FILTER_ALL_ARMS   <- "__all_study_arms__"
+STEP2_FILTER_ALL_VISITS <- "__all_visits__"
+
+step2_filter_label_values <- function(values) {
+  vals <- trimws(as.character(values))
+  vals[is.na(vals) | vals == ""] <- NA_character_
+  sort(unique(vals[!is.na(vals)]))
+}
+
+step2_study_arm_choices <- function(df) {
+  choices <- stats::setNames(STEP2_FILTER_ALL_ARMS, "All study arms")
+  if (is.null(df) || !is.data.frame(df) || !("Study_Arm" %in% names(df))) {
+    return(choices)
+  }
+
+  arms <- step2_filter_label_values(df$Study_Arm)
+  c(choices, stats::setNames(arms, arms))
+}
+
+step2_visit_choices <- function(df) {
+  choices <- stats::setNames(STEP2_FILTER_ALL_VISITS, "All visits")
+  if (is.null(df) || !is.data.frame(df) || !("Visit_Number" %in% names(df))) {
+    return(choices)
+  }
+
+  visits <- step2_filter_label_values(df$Visit_Number)
+  if (length(visits) == 0) return(choices)
+
+  labels <- vapply(visits, function(visit) {
+    label <- NA_character_
+    if ("Visit_Label" %in% names(df)) {
+      label <- df$Visit_Label[match(visit, df$Visit_Number)]
+    }
+    label <- trimws(as.character(label))
+    if (is.na(label) || label == "" || identical(label, visit)) {
+      visit
+    } else {
+      paste(visit, label, sep = " - ")
+    }
+  }, character(1))
+
+  c(choices, stats::setNames(visits, labels))
+}
+
+step2_filter_rows <- function(df,
+                              study_arm_filter = STEP2_FILTER_ALL_ARMS,
+                              visit_filter = STEP2_FILTER_ALL_VISITS,
+                              activity_search = "") {
+  if (is.null(df) || !is.data.frame(df)) {
+    df <- data.frame()
+  }
+
+  df$.step2_source_index <- seq_len(nrow(df))
+
+  if ("Study_Arm" %in% names(df) && !is.null(study_arm_filter) &&
+      !identical(study_arm_filter, STEP2_FILTER_ALL_ARMS)) {
+    keep <- trimws(as.character(df$Study_Arm)) == study_arm_filter
+    df <- df[keep %in% TRUE, , drop = FALSE]
+  }
+
+  if ("Visit_Number" %in% names(df) && !is.null(visit_filter) &&
+      !identical(visit_filter, STEP2_FILTER_ALL_VISITS)) {
+    keep <- trimws(as.character(df$Visit_Number)) == visit_filter
+    df <- df[keep %in% TRUE, , drop = FALSE]
+  }
+
+  search <- if (is.null(activity_search)) "" else trimws(as.character(activity_search))
+  if (nzchar(search) && "Activity_Name" %in% names(df)) {
+    activity <- as.character(df$Activity_Name)
+    activity[is.na(activity)] <- ""
+    df <- df[grepl(tolower(search), tolower(activity), fixed = TRUE), , drop = FALSE]
+  }
+
+  df
+}
+
 step2_UI <- function(id) {
   ns <- NS(id)
   tagList(
@@ -68,6 +144,34 @@ step2_UI <- function(id) {
         actionButton(ns("save"), "Save to database", class = "btn-success"),
         actionButton(ns("next_step"), "Next: Apply Tags", class = "pipeline-next-btn")
       ),
+      div(
+        style = paste(
+          "display: flex;",
+          "gap: 0.75rem;",
+          "align-items: flex-end;",
+          "flex-wrap: wrap;",
+          "margin-bottom: 0.75rem;"
+        ),
+        selectInput(
+          ns("study_arm_filter"),
+          "Study Arm",
+          choices = stats::setNames(STEP2_FILTER_ALL_ARMS, "All study arms"),
+          width = "220px"
+        ),
+        selectInput(
+          ns("visit_filter"),
+          "Visit",
+          choices = stats::setNames(STEP2_FILTER_ALL_VISITS, "All visits"),
+          width = "220px"
+        ),
+        textInput(
+          ns("activity_search"),
+          "Activity search",
+          value = "",
+          placeholder = "Search activities...",
+          width = "260px"
+        )
+      ),
       reactableOutput(ns("table"))
     )
   )
@@ -77,11 +181,55 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
   moduleServer(id, function(input, output, session) {
           
     working_data <- reactiveValues(df = NULL)
+    selected_row_index <- reactiveVal(NULL)
     is_saved <- reactiveVal(FALSE)
     
     observe({
       shinyjs::toggleState("next_step", condition = isTRUE(is_saved()))
     })
+
+    visible_rows <- reactive({
+      req(working_data$df)
+
+      study_arm_filter <- input$study_arm_filter
+      visit_filter <- input$visit_filter
+      if (is.null(study_arm_filter) || !nzchar(study_arm_filter)) {
+        study_arm_filter <- STEP2_FILTER_ALL_ARMS
+      }
+      if (is.null(visit_filter) || !nzchar(visit_filter)) {
+        visit_filter <- STEP2_FILTER_ALL_VISITS
+      }
+
+      step2_filter_rows(
+        working_data$df,
+        study_arm_filter = study_arm_filter,
+        visit_filter = visit_filter,
+        activity_search = input$activity_search
+      )
+    })
+
+    refresh_table <- function() {
+      req(working_data$df)
+      updateReactable("table", data = visible_rows())
+    }
+
+    reset_filters <- function() {
+      req(working_data$df)
+      updateSelectInput(
+        session,
+        "study_arm_filter",
+        choices = step2_study_arm_choices(working_data$df),
+        selected = STEP2_FILTER_ALL_ARMS
+      )
+      updateSelectInput(
+        session,
+        "visit_filter",
+        choices = step2_visit_choices(working_data$df),
+        selected = STEP2_FILTER_ALL_VISITS
+      )
+      updateTextInput(session, "activity_search", value = "")
+      selected_row_index(NULL)
+    }
     
     # ── Load data ─────────────────────────────────────────────────────────────
     observe({
@@ -102,6 +250,7 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
       )
       
       working_data$df <- df
+      reset_filters()
       is_saved(FALSE)
     })
     
@@ -112,7 +261,7 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
       } else {
         round(working_data$df$ICT_Cost)
       }
-      updateReactable("table", data = working_data$df)
+      refresh_table()
     }
 
     # ── Toggle rounding mode ──────────────────────────────────────────────────
@@ -120,12 +269,23 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
       apply_contract_cost_mode(input$use_unrounded_cost)
       is_saved(FALSE)
     })
+
+    observeEvent(list(input$study_arm_filter, input$visit_filter, input$activity_search), {
+      selected_row_index(NULL)
+      refresh_table()
+    }, ignoreInit = TRUE)
     
     # ── Row select → modal ────────────────────────────────────────────────────
     observeEvent(getReactableState("table", "selected"), {
-      req(getReactableState("table", "selected"))
+      selected_visible_row <- getReactableState("table", "selected")
+      req(selected_visible_row)
       
-      selected_row <- getReactableState("table", "selected")
+      df <- visible_rows()
+      selected_visible_row <- selected_visible_row[[1]]
+      req(selected_visible_row >= 1L, selected_visible_row <= nrow(df))
+
+      selected_row <- df$.step2_source_index[[selected_visible_row]]
+      selected_row_index(selected_row)
       row <- working_data$df[selected_row, ]
       
       showModal(modalDialog(
@@ -151,10 +311,11 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
     observeEvent(input$confirm_edit, {
       req(input$contract_value)
       
-      selected_row <- getReactableState("table", "selected")
+      selected_row <- selected_row_index()
+      req(selected_row)
       working_data$df[selected_row, "Contract_Cost"] <- input$contract_value
       
-      updateReactable("table", data = working_data$df)
+      refresh_table()
       is_saved(FALSE)
       removeModal()
     })
@@ -244,11 +405,12 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
     output$table <- renderReactable({
       req(working_data$df)
       reactable(
-        working_data$df,
+        visible_rows(),
         selection = "single",
         onClick   = "select",
         rownames  = FALSE,
         columns = list(
+          .step2_source_index = colDef(show = FALSE),
           Contract_Cost = colDef(
             name = "Contract Cost",
             headerStyle = list(

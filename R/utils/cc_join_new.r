@@ -83,7 +83,7 @@ View(posting_lines)
 data <- read.csv("/Users/tategraham/Downloads/COST_CENTRE_TESTING_csv.csv", stringsAsFactors = FALSE)
 
 # 2. Write to XLSX format
-write_xlsx(posting_lines, "/Users/tategraham/Downloads/new_matrix_COST_CENTRE_TESTING_xlsx.xlsx")
+write_xlsx(posting_lines, "/Users/tategraham/Downloads/040626_COST_CENTRE_TESTING_xlsx.xlsx")
 write.csv(posting_lines, "/Users/tategraham/Downloads/new_matrix_COST_CENTRE_TESTING_csv.csv", row.names = FALSE)
 
 

@@ -7,6 +7,73 @@ edge_builder_normalize_department <- function(values) {
   vals
 }
 
+EDGE_BUILDER_DEPT_ALL   <- "__all_departments__"
+EDGE_BUILDER_DEPT_NONE  <- "__no_department__"
+EDGE_BUILDER_SORT_NONE  <- "original"
+EDGE_BUILDER_SORT_ASC   <- "description_az"
+EDGE_BUILDER_SORT_DESC  <- "description_za"
+
+edge_builder_sort_choices <- function() {
+  c(
+    "Original order"  = EDGE_BUILDER_SORT_NONE,
+    "Description A-Z" = EDGE_BUILDER_SORT_ASC,
+    "Description Z-A" = EDGE_BUILDER_SORT_DESC
+  )
+}
+
+edge_builder_department_choices <- function(df) {
+  choices <- stats::setNames(EDGE_BUILDER_DEPT_ALL, "All departments")
+
+  if (is.null(df) || !is.data.frame(df) || !("Department" %in% names(df))) {
+    return(choices)
+  }
+
+  departments <- edge_builder_normalize_department(df$Department)
+  named_departments <- sort(unique(departments[!is.na(departments)]))
+  if (length(named_departments) > 0) {
+    choices <- c(choices, stats::setNames(named_departments, named_departments))
+  }
+  if (any(is.na(departments))) {
+    choices <- c(choices, stats::setNames(EDGE_BUILDER_DEPT_NONE, "(No department)"))
+  }
+
+  choices
+}
+
+edge_builder_filter_sort_rows <- function(df,
+                                          department_filter = EDGE_BUILDER_DEPT_ALL,
+                                          sort_order = EDGE_BUILDER_SORT_NONE) {
+  if (is.null(df) || !is.data.frame(df)) {
+    df <- data.frame()
+  }
+
+  df$.edge_builder_source_index <- seq_len(nrow(df))
+
+  if ("Department" %in% names(df) && !is.null(department_filter) &&
+      !identical(department_filter, EDGE_BUILDER_DEPT_ALL)) {
+    departments <- edge_builder_normalize_department(df$Department)
+    keep <- if (identical(department_filter, EDGE_BUILDER_DEPT_NONE)) {
+      is.na(departments)
+    } else {
+      departments == department_filter
+    }
+    df <- df[keep %in% TRUE, , drop = FALSE]
+  }
+
+  if ("Cost Item Description" %in% names(df) && !is.null(sort_order) &&
+      !identical(sort_order, EDGE_BUILDER_SORT_NONE)) {
+    descriptions <- tolower(as.character(df[["Cost Item Description"]]))
+    order_idx <- if (identical(sort_order, EDGE_BUILDER_SORT_DESC)) {
+      order(descriptions, na.last = TRUE, decreasing = TRUE)
+    } else {
+      order(descriptions, df$.edge_builder_source_index, na.last = TRUE)
+    }
+    df <- df[order_idx, , drop = FALSE]
+  }
+
+  df
+}
+
 edge_builder_compute_movable <- function(tpls) {
   names(tpls)[vapply(tpls, function(d) {
     if (!"Department" %in% names(d)) return(FALSE)
@@ -69,6 +136,28 @@ edgeBuilderUI <- function(id) {
         width = 8,
         h4(textOutput(ns("active_title"))),
         uiOutput(ns("readonly_notice")),
+        div(
+          style = paste(
+            "display: flex;",
+            "gap: 0.75rem;",
+            "align-items: flex-end;",
+            "flex-wrap: wrap;",
+            "margin: 0.25rem 0 0.75rem;"
+          ),
+          selectInput(
+            ns("department_filter"),
+            "Department",
+            choices = stats::setNames(EDGE_BUILDER_DEPT_ALL, "All departments"),
+            width = "220px"
+          ),
+          selectInput(
+            ns("sort_order"),
+            "Sort",
+            choices = edge_builder_sort_choices(),
+            selected = EDGE_BUILDER_SORT_NONE,
+            width = "180px"
+          )
+        ),
         reactableOutput(ns("rows_table")),
         div(
           style = "margin-top: 0.5rem; display: flex; align-items: center; gap: 1rem;",
@@ -99,9 +188,49 @@ edgeBuilderServer <- function(id, edge_templates) {
     
     # ── Helpers ──────────────────────────────────────────────────────────────
     is_movable <- function(nm) edge_builder_can_move_from(nm, rv$movable)
+
+    reset_table_controls <- function(active = rv$active) {
+      if (is.null(active) || is.null(rv$templates) || !(active %in% names(rv$templates))) {
+        return(invisible(NULL))
+      }
+
+      updateSelectInput(
+        session,
+        "department_filter",
+        choices = edge_builder_department_choices(rv$templates[[active]]),
+        selected = EDGE_BUILDER_DEPT_ALL
+      )
+      updateSelectInput(
+        session,
+        "sort_order",
+        choices = edge_builder_sort_choices(),
+        selected = EDGE_BUILDER_SORT_NONE
+      )
+      rv$selected <- integer(0)
+      invisible(NULL)
+    }
     
     new_name_validity <- reactive({
       edge_builder_validate_new_name(input$new_template_name, names(rv$templates))
+    })
+
+    visible_rows <- reactive({
+      req(rv$active, rv$templates)
+
+      department_filter <- input$department_filter
+      sort_order <- input$sort_order
+      if (is.null(department_filter) || !nzchar(department_filter)) {
+        department_filter <- EDGE_BUILDER_DEPT_ALL
+      }
+      if (is.null(sort_order) || !nzchar(sort_order)) {
+        sort_order <- EDGE_BUILDER_SORT_NONE
+      }
+
+      edge_builder_filter_sort_rows(
+        rv$templates[[rv$active]],
+        department_filter = department_filter,
+        sort_order = sort_order
+      )
     })
     
     # ── Initialise from upstream ─────────────────────────────────────────────
@@ -116,6 +245,7 @@ edgeBuilderServer <- function(id, edge_templates) {
       if (is.null(rv$active) || !(rv$active %in% names(tpls))) {
         rv$active <- if (length(rv$movable) > 0) rv$movable[1] else names(tpls)[1]
       }
+      reset_table_controls()
     })
     
     # ── Reset ────────────────────────────────────────────────────────────────
@@ -136,6 +266,7 @@ edgeBuilderServer <- function(id, edge_templates) {
       rv$templates <- rv$original
       rv$selected  <- integer(0)
       rv$active    <- if (length(rv$movable) > 0) rv$movable[1] else names(rv$original)[1]
+      reset_table_controls()
       
       removeModal()
       showNotification("Templates reset to original", type = "message", duration = 2)
@@ -169,6 +300,7 @@ edgeBuilderServer <- function(id, edge_templates) {
         observeEvent(input[[paste0("sel_", nm)]], {
           rv$active   <- nm
           rv$selected <- integer(0)
+          reset_table_controls(nm)
         }, ignoreInit = TRUE)
       })
     })
@@ -201,7 +333,7 @@ edgeBuilderServer <- function(id, edge_templates) {
     output$rows_table <- renderReactable({
       req(rv$active, rv$templates)
       
-      df <- rv$templates[[rv$active]]
+      df <- visible_rows()
       
       # Pin column order: Department first, then everything else in its existing order
       preferred_order <- c("Department", "Cost Item Description", "Default Cost", "Analysis Code")
@@ -269,9 +401,19 @@ edgeBuilderServer <- function(id, edge_templates) {
     
     # ── Selection ────────────────────────────────────────────────────────────
     observe({
+      df <- visible_rows()
       sel <- getReactableState("rows_table", "selected")
-      rv$selected <- if (is.null(sel)) integer(0) else sel
+      if (is.null(sel) || length(sel) == 0) {
+        rv$selected <- integer(0)
+      } else {
+        sel <- sel[sel >= 1L & sel <= nrow(df)]
+        rv$selected <- as.integer(df$.edge_builder_source_index[sel])
+      }
     })
+
+    observeEvent(list(input$department_filter, input$sort_order), {
+      rv$selected <- integer(0)
+    }, ignoreInit = TRUE)
     
     output$selected_count <- renderText({
       paste0(length(rv$selected), " selected")
