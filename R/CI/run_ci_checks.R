@@ -22,10 +22,10 @@ run_bootstrap_check <- function() {
   config_path <- file.path(temp_root, "deployment_config.R")
   config <- list(
     storage_mode = "duckdb",
-    db_dir = file.path(temp_root, "data", "RIDS.duckdb"),
-    ict_upload_dir = file.path(temp_root, "uploads"),
-    edge_output_dir = file.path(temp_root, "outputs"),
-    app_log_dir = file.path(temp_root, "logs"),
+    db_dir = normalizePath(file.path(temp_root, "data", "RIDS.duckdb"), winslash = "/", mustWork = FALSE),
+    ict_upload_dir = normalizePath(file.path(temp_root, "uploads"), winslash = "/", mustWork = FALSE),
+    edge_output_dir = normalizePath(file.path(temp_root, "outputs"), winslash = "/", mustWork = FALSE),
+    app_log_dir = normalizePath(file.path(temp_root, "logs"), winslash = "/", mustWork = FALSE),
     app_host = "127.0.0.1",
     app_port = 3838L,
     sql_server = "",
@@ -53,10 +53,10 @@ run_working_tree_release_check <- function() {
 
   config <- list(
     storage_mode = "duckdb",
-    db_dir = file.path(temp_root, "shared", "data", "RIDS.duckdb"),
-    ict_upload_dir = file.path(temp_root, "shared", "uploads"),
-    edge_output_dir = file.path(temp_root, "shared", "outputs"),
-    app_log_dir = file.path(temp_root, "shared", "logs"),
+    db_dir = normalizePath(file.path(temp_root, "shared", "data", "RIDS.duckdb"), winslash = "/", mustWork = FALSE),
+    ict_upload_dir = normalizePath(file.path(temp_root, "shared", "uploads"), winslash = "/", mustWork = FALSE),
+    edge_output_dir = normalizePath(file.path(temp_root, "shared", "outputs"), winslash = "/", mustWork = FALSE),
+    app_log_dir = normalizePath(file.path(temp_root, "shared", "logs"), winslash = "/", mustWork = FALSE),
     app_host = "127.0.0.1",
     app_port = 3838L,
     sql_server = "",
