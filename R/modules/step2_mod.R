@@ -1,5 +1,10 @@
 STEP2_FILTER_ALL_ARMS   <- "__all_study_arms__"
 STEP2_FILTER_ALL_VISITS <- "__all_visits__"
+STEP2_STATE_COLUMNS     <- c(
+  ".step2_base_contract_cost",
+  ".step2_override_contract_cost",
+  ".step2_has_override"
+)
 
 step2_filter_label_values <- function(values) {
   vals <- trimws(as.character(values))
@@ -71,6 +76,93 @@ step2_filter_rows <- function(df,
     df <- df[grepl(tolower(search), tolower(activity), fixed = TRUE), , drop = FALSE]
   }
 
+  df
+}
+
+step2_contract_cost_values <- function(ict_cost, use_unrounded_cost = FALSE) {
+  if (isTRUE(use_unrounded_cost)) {
+    ict_cost
+  } else {
+    round(ict_cost)
+  }
+}
+
+step2_initialize_contract_costs <- function(df, use_unrounded_cost = FALSE) {
+  if (is.null(df) || !is.data.frame(df) || !("ICT_Cost" %in% names(df))) {
+    return(df)
+  }
+
+  if (!("Contract_Cost" %in% names(df))) {
+    df$Contract_Cost <- NA_real_
+  }
+
+  missing_contract_cost <- is.na(df$Contract_Cost)
+  if (any(missing_contract_cost)) {
+    df$Contract_Cost[missing_contract_cost] <- step2_contract_cost_values(
+      df$ICT_Cost[missing_contract_cost],
+      use_unrounded_cost = use_unrounded_cost
+    )
+  }
+
+  df
+}
+
+step2_strip_state_columns <- function(df) {
+  if (is.null(df) || !is.data.frame(df)) {
+    return(df)
+  }
+
+  keep <- setdiff(names(df), STEP2_STATE_COLUMNS)
+  df[, keep, drop = FALSE]
+}
+
+step2_prepare_working_data <- function(df, use_unrounded_cost = FALSE) {
+  df <- step2_initialize_contract_costs(df, use_unrounded_cost = use_unrounded_cost)
+  if (is.null(df) || !is.data.frame(df) || !("ICT_Cost" %in% names(df))) {
+    return(df)
+  }
+
+  df$.step2_base_contract_cost <- step2_contract_cost_values(
+    df$ICT_Cost,
+    use_unrounded_cost = use_unrounded_cost
+  )
+  df$.step2_override_contract_cost <- rep(NA_real_, nrow(df))
+  df$.step2_has_override <- rep(FALSE, nrow(df))
+  df
+}
+
+step2_reset_contract_cost_mode <- function(df, use_unrounded_cost = FALSE) {
+  if (is.null(df) || !is.data.frame(df) || !("ICT_Cost" %in% names(df))) {
+    return(df)
+  }
+
+  df$.step2_base_contract_cost <- step2_contract_cost_values(
+    df$ICT_Cost,
+    use_unrounded_cost = use_unrounded_cost
+  )
+  df$.step2_override_contract_cost <- rep(NA_real_, nrow(df))
+  df$.step2_has_override <- rep(FALSE, nrow(df))
+  df$Contract_Cost <- df$.step2_base_contract_cost
+  df
+}
+
+step2_apply_contract_override <- function(df, row_index, contract_cost) {
+  if (is.null(df) || !is.data.frame(df)) {
+    return(df)
+  }
+
+  if (length(row_index) != 1L || is.na(row_index) ||
+      row_index < 1L || row_index > nrow(df)) {
+    stop("step2_apply_contract_override(): invalid row_index.")
+  }
+
+  if (!all(STEP2_STATE_COLUMNS %in% names(df))) {
+    stop("step2_apply_contract_override(): working data is missing state columns.")
+  }
+
+  df$.step2_override_contract_cost[[row_index]] <- as.numeric(contract_cost)
+  df$.step2_has_override[[row_index]] <- TRUE
+  df$Contract_Cost[[row_index]] <- as.numeric(contract_cost)
   df
 }
 
@@ -201,7 +293,7 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
       }
 
       step2_filter_rows(
-        working_data$df,
+        step2_strip_state_columns(working_data$df),
         study_arm_filter = study_arm_filter,
         visit_filter = visit_filter,
         activity_search = input$activity_search
@@ -232,9 +324,11 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
     }
     
     # ── Load data ─────────────────────────────────────────────────────────────
-    observe({
-      req(shared_state$cpms_id)
-      
+    observeEvent(
+      list(shared_state$cpms_id, shared_state$study_site, shared_state$scenario_id),
+      {
+      req(shared_state$cpms_id, shared_state$study_site, shared_state$scenario_id)
+
       df <- DBI::dbGetQuery(
         CON,
         "SELECT CPMS_ID, study_site, scenario_id, Study, Visit_Number, Study_Arm,
@@ -249,18 +343,22 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
          )
       )
       
-      working_data$df <- df
+      working_data$df <- step2_prepare_working_data(
+        df,
+        use_unrounded_cost = isTRUE(isolate(input$use_unrounded_cost))
+      )
       reset_filters()
       is_saved(FALSE)
-    })
+    },
+    ignoreInit = FALSE
+    )
     
     apply_contract_cost_mode <- function(use_unrounded_cost) {
       req(working_data$df)
-      working_data$df$Contract_Cost <- if (isTRUE(use_unrounded_cost)) {
-        working_data$df$ICT_Cost
-      } else {
-        round(working_data$df$ICT_Cost)
-      }
+      working_data$df <- step2_reset_contract_cost_mode(
+        working_data$df,
+        use_unrounded_cost = use_unrounded_cost
+      )
       refresh_table()
     }
 
@@ -297,7 +395,7 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
         numericInput(
           session$ns("contract_value"),
           label = "Contract Cost (£)",
-          value = NULL,
+          value = row$Contract_Cost,
           min   = 0
         ),
         footer = tagList(
@@ -313,7 +411,11 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
       
       selected_row <- selected_row_index()
       req(selected_row)
-      working_data$df[selected_row, "Contract_Cost"] <- input$contract_value
+      working_data$df <- step2_apply_contract_override(
+        working_data$df,
+        row_index = selected_row,
+        contract_cost = input$contract_value
+      )
       
       refresh_table()
       is_saved(FALSE)
@@ -349,7 +451,7 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
                     as.character(shared_state$scenario_id)
                   )
         )
-        dbAppendTable(CON, "ict_costing_tbl", working_data$df)
+        dbAppendTable(CON, "ict_costing_tbl", step2_strip_state_columns(working_data$df))
 
         log_event(
           level = "INFO",
