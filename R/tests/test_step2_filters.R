@@ -105,6 +105,88 @@ run_step2_filter_tests <- function() {
   .expect("activity search handles missing activity names without errors",
           nrow(missing_activity_rows) == 0L)
 
+  cat("\n[ contract cost initialisation ]\n")
+  rounded_input <- rows
+  rounded_input$Contract_Cost <- c(NA_real_, NA_real_, 75, NA_real_)
+  rounded_rows <- step2_initialize_contract_costs(
+    rounded_input,
+    use_unrounded_cost = FALSE
+  )
+  .expect("missing contract costs initialise from rounded ICT cost",
+          identical(rounded_rows$Contract_Cost, c(20, 100, 75, 10)))
+
+  unrounded_input <- rows
+  unrounded_input$Contract_Cost <- NA_real_
+  unrounded_rows <- step2_initialize_contract_costs(
+    unrounded_input,
+    use_unrounded_cost = TRUE
+  )
+  .expect("unrounded mode initialises every missing contract cost from ICT cost",
+          identical(unrounded_rows$Contract_Cost, c(20, 100, 50, 10)))
+
+  cat("\n[ override state ]\n")
+  override_rows <- tibble(
+    CPMS_ID = "CP1",
+    study_site = "RDUHT",
+    scenario_id = "A",
+    Study = "Study A",
+    Visit_Number = c("VISIT - 002", "VISIT - 001", "VISIT - 001", "VISIT - 003"),
+    Study_Arm = c("Arm B", "Arm A", "Arm A", "Arm B"),
+    Visit_Label = c("Follow-up", "Screening", "Screening", "Closeout"),
+    Activity_Name = c("Blood test", "Informed consent", "Demographics", "Follow-up labs"),
+    ICT_Cost = c(20.49, 100.49, 50.25, 10.75),
+    Contract_Cost = c(20.49, 100.49, 50.25, 10.75),
+    activity_occurrence_id = c("B1", "A1", "A2", "B2"),
+    staff_group = c(1L, 1L, 2L, 1L)
+  )
+
+  prepared_rows <- step2_prepare_working_data(
+    override_rows,
+    use_unrounded_cost = FALSE
+  )
+  overridden_rows <- step2_apply_contract_override(prepared_rows, 2L, 123.45)
+
+  .expect("manual override updates only the selected row",
+          identical(overridden_rows$Contract_Cost, c(20.49, 123.45, 50.25, 10.75)))
+  .expect("manual override marks only the selected row as overridden",
+          identical(overridden_rows$.step2_has_override, c(FALSE, TRUE, FALSE, FALSE)))
+
+  arm_override_rows <- step2_filter_rows(
+    step2_strip_state_columns(overridden_rows),
+    study_arm_filter = "Arm A",
+    visit_filter = STEP2_FILTER_ALL_VISITS,
+    activity_search = ""
+  )
+  .expect("manual override survives study arm filters",
+          identical(arm_override_rows$Contract_Cost, c(123.45, 50.25)))
+
+  visit_override_rows <- step2_filter_rows(
+    step2_strip_state_columns(overridden_rows),
+    study_arm_filter = "Arm A",
+    visit_filter = "VISIT - 001",
+    activity_search = ""
+  )
+  .expect("manual override survives visit filters",
+          identical(visit_override_rows$Contract_Cost, c(123.45, 50.25)))
+
+  search_override_rows <- step2_filter_rows(
+    step2_strip_state_columns(overridden_rows),
+    study_arm_filter = STEP2_FILTER_ALL_ARMS,
+    visit_filter = STEP2_FILTER_ALL_VISITS,
+    activity_search = "CONSENT"
+  )
+  .expect("manual override survives activity search filters",
+          identical(search_override_rows$Contract_Cost, 123.45))
+
+  reset_rows <- step2_reset_contract_cost_mode(
+    overridden_rows,
+    use_unrounded_cost = TRUE
+  )
+  .expect("mode toggle clears manual override flags",
+          identical(reset_rows$.step2_has_override, c(FALSE, FALSE, FALSE, FALSE)))
+  .expect("mode toggle recalculates every row from the selected mode",
+          identical(reset_rows$Contract_Cost, override_rows$ICT_Cost))
+
   cat("\n", strrep("=", 60), "\n", sep = "")
   cat("PASSED: ", .passed, "    FAILED: ", .failed, "\n", sep = "")
   cat(strrep("=", 60), "\n", sep = "")
