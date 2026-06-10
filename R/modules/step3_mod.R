@@ -41,12 +41,14 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
         posting_ict <- tryCatch({
           duplicate_screening_failure_sheets(
             shared_state$processed_ict,
-            include_screening_failure = isTRUE(shared_state$include_screening_failure)
+            include_screening_failure = isTRUE(shared_state$include_screening_failure),
+            screening_failure_arm = shared_state$screening_failure_arm
           )
         }, error = function(e) {
           app_log_exception("step3", "Screening failure source duplication failed", e, list(
             cpms_id = shared_state$cpms_id,
-            include_screening_failure = isTRUE(shared_state$include_screening_failure)
+            include_screening_failure = isTRUE(shared_state$include_screening_failure),
+            screening_failure_arm = shared_state$screening_failure_arm
           ))
           showNotification("Failed to prepare Screening Failure rows", type = "error")
           return(NULL)

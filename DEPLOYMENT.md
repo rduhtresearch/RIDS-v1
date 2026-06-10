@@ -189,6 +189,8 @@ What this does:
 3. Updates `shared/current_release.txt`
 4. Writes a line to `shared/deploy_log.tsv`
 
+The version name is a manual release label. It does not need to match a Git tag.
+
 ### 5. Prepare the laptop if this release adds new packages
 
 If the release introduces new R package dependencies, rerun:

@@ -18,7 +18,7 @@ step1_UI <- function(id) {
       checkboxInput(
         ns("mff_split_enabled"),
         "Use new MFF split",
-        value = FALSE
+        value = TRUE
       ),
       numericInput(
         ns("mff_split_pct"),
@@ -33,6 +33,17 @@ step1_UI <- function(id) {
         "Generate Screening Failure EDGE templates",
         value = FALSE
       ),
+      shinyjs::hidden(
+        div(
+          id = ns("screening_failure_arm_wrap"),
+          selectInput(
+            ns("screening_failure_arm"),
+            "Screening Failure arm",
+            choices = c("No eligible study arm found" = ""),
+            selected = ""
+          )
+        )
+      ),
     fileInput(ns("upload"), "Choose Excel File",
               multiple = FALSE,
               accept = c(".xlsx")),
@@ -44,15 +55,24 @@ step1_UI <- function(id) {
 
 step1_Server <- function(id, auth_state, shared_state, current_step) {
   moduleServer(id, function(input, output, session) {
+    screening_arm_choices <- reactiveVal(character(0))
+
     reset_step1_form <- function() {
       updateSelectInput(session, "scenario", selected = "A")
       updateSelectInput(session, "study_site", selected = "")
       updateSelectInput(session, "speciality_id", selected = "")
       updateTextInput(session, "edge_id", value = "")
       updateTextInput(session, "study_name", value = "")
-      updateCheckboxInput(session, "mff_split_enabled", value = FALSE)
+      updateCheckboxInput(session, "mff_split_enabled", value = TRUE)
       updateNumericInput(session, "mff_split_pct", value = 0.25)
       updateCheckboxInput(session, "include_screening_failure", value = FALSE)
+      screening_arm_choices(character(0))
+      updateSelectInput(
+        session,
+        "screening_failure_arm",
+        choices = c("No eligible study arm found" = ""),
+        selected = ""
+      )
       updateTextAreaInput(session, "notes", value = "")
       session$sendCustomMessage("resetFileInput", list(id = session$ns("upload")))
 
@@ -97,6 +117,56 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
         anim = TRUE
       )
     })
+
+    observe({
+      shinyjs::toggle(
+        id = "screening_failure_arm_wrap",
+        condition = isTRUE(input$include_screening_failure) &&
+          length(screening_arm_choices()) > 0,
+        anim = TRUE
+      )
+    })
+
+    observeEvent(input$upload, {
+      if (is.null(input$upload)) {
+        screening_arm_choices(character(0))
+        updateSelectInput(
+          session,
+          "screening_failure_arm",
+          choices = c("No eligible study arm found" = ""),
+          selected = ""
+        )
+        return()
+      }
+
+      sheet_names <- tryCatch(
+        openxlsx::getSheetNames(input$upload$datapath),
+        error = function(e) character(0)
+      )
+
+      candidates <- screening_failure_candidate_sheets(sheet_names)
+      screening_arm_choices(candidates)
+
+      if (length(candidates) == 0) {
+        updateSelectInput(
+          session,
+          "screening_failure_arm",
+          choices = c("No eligible study arm found" = ""),
+          selected = ""
+        )
+        return()
+      }
+
+      choice_labels <- candidates
+      choice_labels[[1]] <- paste0(choice_labels[[1]], " (automatic)")
+
+      updateSelectInput(
+        session,
+        "screening_failure_arm",
+        choices = stats::setNames(candidates, choice_labels),
+        selected = candidates[[1]]
+      )
+    }, ignoreNULL = FALSE)
     
     # ── Help ─────────────────────────────────────────────────────────────────
     helpServer("help", content = list(
@@ -469,6 +539,31 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       })
       
       req(shared_state$processed_ict)
+
+      processed_candidates <- screening_failure_candidate_sheets(shared_state$processed_ict)
+      selected_screening_arm <- resolve_screening_failure_arm(
+        shared_state$processed_ict,
+        input$screening_failure_arm
+      )
+
+      screening_arm_choices(processed_candidates)
+      if (length(processed_candidates) > 0) {
+        processed_labels <- processed_candidates
+        processed_labels[[1]] <- paste0(processed_labels[[1]], " (automatic)")
+        updateSelectInput(
+          session,
+          "screening_failure_arm",
+          choices = stats::setNames(processed_candidates, processed_labels),
+          selected = if (!is.na(selected_screening_arm)) selected_screening_arm else processed_candidates[[1]]
+        )
+      } else {
+        updateSelectInput(
+          session,
+          "screening_failure_arm",
+          choices = c("No eligible study arm found" = ""),
+          selected = ""
+        )
+      }
       
       # ── Resolve speciality name for shared_state ─────────────────────────
       sp_id   <- as.integer(input$speciality_id)
@@ -479,6 +574,7 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       shared_state$scenario_id      <- input$scenario
       shared_state$study_site       <- input$study_site
       shared_state$include_screening_failure <- isTRUE(input$include_screening_failure)
+      shared_state$screening_failure_arm <- if (!is.na(selected_screening_arm)) selected_screening_arm else NULL
       shared_state$mff_split_enabled <- isTRUE(input$mff_split_enabled)
       shared_state$mff_split_pct <- if (isTRUE(input$mff_split_enabled)) as.numeric(input$mff_split_pct) else 0
       shared_state$speciality_id    <- sp_id
@@ -490,6 +586,7 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
         mff_split_enabled = isTRUE(input$mff_split_enabled),
         mff_split_pct   = if (isTRUE(input$mff_split_enabled)) as.numeric(input$mff_split_pct) else 0,
         include_screening_failure = isTRUE(input$include_screening_failure),
+        screening_failure_arm = if (!is.na(selected_screening_arm)) selected_screening_arm else NULL,
         edge_id         = input$edge_id,
         study_name      = input$study_name,
         filename        = original_name,
