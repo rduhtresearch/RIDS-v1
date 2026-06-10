@@ -9,7 +9,7 @@ speciality_code = '58109'
 #df <- read_csv("/Users/tategraham/Downloads/Book8(Sheet1)-2.csv")
 #df <- read_csv('/Users/tategraham/Downloads/Book10(Sheet1).csv')
 #df <- read_csv('/Users/tategraham/Downloads/Book10(Sheet1)-2.csv')
-df <- read_csv("'/Users/tategraham/Downloads/Book10(Sheet1)-3.csv'")
+df <- read_csv("/Users/tategraham/Downloads/Book10(Sheet1)-3.csv")
 
 
 #posting_lines <- read_csv("/Users/tategraham/Downloads/75743_RDUHT_test_posting_lines_20260601_163338.csv")
