@@ -75,6 +75,23 @@ ui <- tagList(
 )
 
 server <- function(input, output, session) {
+  shutdown_requested <- FALSE
+
+  request_app_shutdown <- function(reason) {
+    if (isTRUE(shutdown_requested)) {
+      return(invisible(FALSE))
+    }
+
+    shutdown_requested <<- TRUE
+    app_log_info("shutdown", paste("Stopping RIDS app:", reason))
+    stopApp()
+    invisible(TRUE)
+  }
+
+  session$userData$request_app_shutdown <- request_app_shutdown
+  session$onSessionEnded(function() {
+    request_app_shutdown("browser session ended")
+  })
   
   output$user_badge <- renderUI({
     req(auth_state$logged_in)
