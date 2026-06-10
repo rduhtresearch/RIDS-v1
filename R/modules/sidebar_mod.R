@@ -102,6 +102,12 @@ sidebarServer <- function(id, auth_state, parent_session, current_step) {
       } else {
         auth_state$logged_in <- FALSE
       }
+
+      if (is.function(parent_session$userData$request_app_shutdown)) {
+        parent_session$onFlushed(function() {
+          parent_session$userData$request_app_shutdown("user logged out")
+        }, once = TRUE)
+      }
     })
 
     observeEvent(input$new_ict, {
