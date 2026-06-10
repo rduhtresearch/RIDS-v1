@@ -14,11 +14,10 @@ source(file.path(repo_dir, "R/utils/release_management.R"))
 usage <- function() {
   paste(
     "Usage:",
-    "  Rscript R/SETUP/release_publish.R publish --version v0.5.0",
     "  Rscript R/SETUP/release_publish.R publish-local --version v0.5.0",
     "  Rscript R/SETUP/release_publish.R rollback --version v0.4.1",
     "Options:",
-    "  --force    Rebuild an existing release folder during publish or publish-local.",
+    "  --force    Rebuild an existing release folder during publish-local.",
     sep = "\n"
   )
 }
@@ -66,8 +65,12 @@ parse_args <- function(args) {
     stop("Unexpected argument: ", arg, "\n", usage())
   }
 
-  if (!mode %in% c("publish", "publish-local", "rollback")) {
-    stop("Mode must be 'publish', 'publish-local', or 'rollback'.\n", usage())
+  if (!mode %in% c("publish-local", "rollback")) {
+    stop(
+      "Mode must be 'publish-local' or 'rollback'. ",
+      "Release versions are manual labels, not Git tags.\n",
+      usage()
+    )
   }
 
   version <- trimws(version)
@@ -85,7 +88,6 @@ releases_dir <- file.path(repo_dir, "releases")
 config_path <- file.path(shared_dir, "deployment_config.R")
 current_release_path <- file.path(shared_dir, "current_release.txt")
 deploy_log_path <- file.path(shared_dir, "deploy_log.tsv")
-target_release_dir <- file.path(releases_dir, settings$version)
 
 if (!file.exists(config_path)) {
   stop("Shared deployment config was not found. Run R/SETUP/new_setup.R first.")
@@ -93,22 +95,6 @@ if (!file.exists(config_path)) {
 
 dir.create(shared_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(releases_dir, recursive = TRUE, showWarnings = FALSE)
-
-execute_publish <- function(version, force = FALSE) {
-  if (!git_tag_exists(repo_dir, version)) {
-    stop("Git tag was not found: ", version)
-  }
-
-  export_git_snapshot(
-    repo_dir = repo_dir,
-    ref = version,
-    target_dir = file.path(releases_dir, version),
-    overwrite = force
-  )
-
-  run_release_smoke_check(file.path(releases_dir, version), config_path)
-  write_release_pointer(current_release_path, version)
-}
 
 execute_publish_local <- function(version, force = FALSE) {
   export_working_tree_snapshot(
@@ -132,9 +118,7 @@ execute_rollback <- function(version) {
 }
 
 result <- tryCatch({
-  if (identical(settings$mode, "publish")) {
-    execute_publish(settings$version, force = settings$force)
-  } else if (identical(settings$mode, "publish-local")) {
+  if (identical(settings$mode, "publish-local")) {
     execute_publish_local(settings$version, force = settings$force)
   } else {
     execute_rollback(settings$version)

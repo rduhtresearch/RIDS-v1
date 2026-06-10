@@ -73,10 +73,7 @@ What setup does:
 4. Creates `deployment/Prepare RIDS.bat` and `deployment/Launch RIDS.bat`.
 5. Creates the shared DuckDB database if needed.
 6. Bootstraps the first live release automatically.
-
-On a first-time setup, if `HEAD` already has a Git tag, setup uses that tag.
-If not, setup creates a local bootstrap release from the current working tree so
-the launcher works immediately.
+7. Creates that first live release from the current working tree so the launcher works immediately.
 
 ## Development and Release Flow
 
@@ -161,12 +158,6 @@ deployment/Prepare RIDS.bat
 Rscript R/SETUP/release_publish.R publish-local --version v0.5.0 --force
 ```
 
-### Publish an exact Git tag
-
-```bash
-Rscript R/SETUP/release_publish.R publish --version v0.5.0
-```
-
 ### Roll back to an earlier release
 
 ```bash
@@ -176,6 +167,6 @@ Rscript R/SETUP/release_publish.R rollback --version v0.4.1
 ## Notes
 
 - `main` is the only permanent branch.
-- Each live deployment can map either to a Git tag or to a manually named working-tree snapshot.
+- Each live deployment maps to a manually named working-tree snapshot under `releases/`.
 - Shared runtime folders should not be committed to Git.
 - The current process is intentionally simple: local checks validate code, and one R script promotes or rolls back versions.

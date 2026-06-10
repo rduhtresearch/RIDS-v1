@@ -65,6 +65,24 @@ condition_passes <- function(condition_field, condition_op, condition_value, is_
   FALSE
 }
 
+normalize_mff_split_config <- function(mff_split_enabled = FALSE, mff_split_pct = 0) {
+  split_enabled <- isTRUE(mff_split_enabled)
+  split_pct <- suppressWarnings(as.numeric(mff_split_pct))
+
+  if (!is.finite(split_pct)) {
+    split_pct <- 0
+  }
+  if (split_pct < 0 || split_pct > 1) {
+    stop("mff_split_pct must be between 0 and 1 inclusive.")
+  }
+
+  list(
+    mff_split_enabled = split_enabled,
+    mff_split_pct = split_pct,
+    split_active = split_enabled && split_pct > 0
+  )
+}
+
 # ======================================================================
 # 1. ICT Input
 # ======================================================================
@@ -197,7 +215,7 @@ load_rules <- function(db_path, ruleset_id) {
   ", params = list(ruleset_id))
   
   amount_map <- dbGetQuery(con, "
-    SELECT posting_line_type_id, base_mult, split_mult, applies_to_row_category
+    SELECT posting_line_type_id, base_mult, split_mult, applies_to_row_category, calc_method
     FROM amount_map
   ")
   
@@ -313,7 +331,9 @@ join_ict_costs <- function(df, db_path) {
 #'
 #' Carries the corrected-schema columns (Study_Arm, Visit_Label,
 #' activity_occurrence_id) through so they appear in the final output.
-apply_dist_rules <- function(df, dist_rules, scenario_id) {
+apply_dist_rules <- function(df, dist_rules, scenario_id,
+                             mff_split_enabled = FALSE, mff_split_pct = 0) {
+  split_cfg <- normalize_mff_split_config(mff_split_enabled, mff_split_pct)
   
   # Columns to carry through — intersect so missing optional cols don't error
   carry_cols <- intersect(
@@ -345,6 +365,11 @@ apply_dist_rules <- function(df, dist_rules, scenario_id) {
           filter(ok) %>%
           arrange(priority)
         
+        if (!split_cfg$split_active) {
+          cand <- cand %>%
+            filter(.data$posting_line_type_id != "MFF_SPLIT_NEW_CC")
+        }
+        
         unique(cand$posting_line_type_id)
       })
     ) %>%
@@ -359,12 +384,40 @@ apply_dist_rules <- function(df, dist_rules, scenario_id) {
 # ======================================================================
 
 #' Join amount_map and compute posting_amount = AC * mff_rate * base_mult * split_mult.
-apply_amount_map <- function(posting_plan, amount_map, mff_rate) {
+apply_amount_map <- function(posting_plan, amount_map, mff_rate,
+                             mff_split_enabled = FALSE, mff_split_pct = 0) {
+  split_cfg <- normalize_mff_split_config(mff_split_enabled, mff_split_pct)
+  mff_uplift <- mff_rate - 1
+  existing_mff_rate <- if (split_cfg$split_active) {
+    1 + (mff_uplift * (1 - split_cfg$mff_split_pct))
+  } else {
+    mff_rate
+  }
+
   posting_plan <- posting_plan %>%
     left_join(amount_map, by = "posting_line_type_id") %>%
     mutate(
-      missing_amount_map = is.na(base_mult) | is.na(split_mult),
-      posting_amount     = activity_cost_num * mff_rate * base_mult * split_mult
+      calc_method = coalesce(calc_method, "STANDARD")
+    ) %>%
+    group_by(row_id) %>%
+    mutate(
+      total_before_mff_factor = sum(
+        if_else(
+          calc_method == "MFF_SPLIT_ONLY",
+          0,
+          base_mult * split_mult
+        ),
+        na.rm = TRUE
+      )
+    ) %>%
+    ungroup() %>%
+    mutate(
+      missing_amount_map = is.na(base_mult) | is.na(split_mult) | is.na(calc_method),
+      posting_amount = case_when(
+        calc_method == "STANDARD" ~ activity_cost_num * existing_mff_rate * base_mult * split_mult,
+        calc_method == "MFF_SPLIT_ONLY" ~ activity_cost_num * total_before_mff_factor * mff_uplift * split_cfg$mff_split_pct,
+        TRUE ~ NA_real_
+      )
     )
   
   if (any(posting_plan$missing_amount_map)) {
@@ -435,10 +488,11 @@ resolve_entities <- function(posting_plan) {
         destination_bucket == "DEST_PROVIDER" ~ provider_org,
         destination_bucket == "DEST_PI_ORG"   ~ pi_org,
         destination_bucket == "DEST_RD"       ~ "R&D",
-        destination_bucket == "DEST_TRUST_OH" ~ "TRUST_OVERHEAD",
-        destination_bucket == "DEST_SUPPORT"  ~ "SUPPORT_BUCKET",
-        TRUE                                  ~ "UNKNOWN"
-      ),
+      destination_bucket == "DEST_TRUST_OH" ~ "TRUST_OVERHEAD",
+      destination_bucket == "DEST_SUPPORT"  ~ "SUPPORT_BUCKET",
+      destination_bucket == "DEST_MFF_SPLIT" ~ "MFF_SPLIT_CC",
+      TRUE                                  ~ "UNKNOWN"
+    ),
       cost_code = NA_character_
     )
 }
@@ -494,6 +548,8 @@ select_output_cols <- function(posting_plan) {
 #' @param scenario_id    Scenario letter ("A" .. "H").
 #' @param ruleset_id     Ruleset identifier (default "COMM_AH_V1").
 #' @param mff_rate       MFF multiplier (default 1.08).
+#' @param mff_split_enabled Optional per-study toggle for the MFF split.
+#' @param mff_split_pct  Optional per-study MFF split percentage in [0, 1].
 #' @param ict_db_path    Optional. Path to the DuckDB containing ict_costing_tbl.
 #'                       If provided, contract costs are joined using the corrected
 #'                       composite key (CPMS_ID + Visit_Number + Study_Arm + Activity_Name).
@@ -505,6 +561,8 @@ generate_posting_plan <- function(ict,
                                   scenario_id,
                                   ruleset_id  = "COMM_AH_V1",
                                   mff_rate    = 1.08,
+                                  mff_split_enabled = FALSE,
+                                  mff_split_pct = 0,
                                   ict_db_path = NULL,
                                   output_path = NULL) {
   df <- read_ict_workbook(ict)
@@ -513,8 +571,20 @@ generate_posting_plan <- function(ict,
     df <- join_ict_costs(df, ict_db_path)
   }
   rules <- load_rules(rules_db_path, ruleset_id)
-  plan <- apply_dist_rules(df, rules$dist_rules, scenario_id)
-  plan <- apply_amount_map(plan, rules$amount_map, mff_rate)
+  plan <- apply_dist_rules(
+    df,
+    rules$dist_rules,
+    scenario_id,
+    mff_split_enabled = mff_split_enabled,
+    mff_split_pct = mff_split_pct
+  )
+  plan <- apply_amount_map(
+    plan,
+    rules$amount_map,
+    mff_rate,
+    mff_split_enabled = mff_split_enabled,
+    mff_split_pct = mff_split_pct
+  )
   plan <- apply_routing(plan, rules$routing_rules)
   plan <- resolve_entities(plan)
   out <- select_output_cols(plan)
@@ -558,6 +628,8 @@ evaluate_posting_plan <- function(prepared_df,
                                   scenario_id,
                                   ruleset_id = "COMM_AH_V1",
                                   mff_rate   = 1.08,
+                                  mff_split_enabled = FALSE,
+                                  mff_split_pct = 0,
                                   output_path = NULL) {
   
   if (!is.data.frame(prepared_df)) {
@@ -569,8 +641,20 @@ evaluate_posting_plan <- function(prepared_df,
   # and row_category is already set there too.
   
   rules <- load_rules(rules_db_path, ruleset_id)
-  plan <- apply_dist_rules(prepared_df, rules$dist_rules, scenario_id)
-  plan <- apply_amount_map(plan, rules$amount_map, mff_rate)
+  plan <- apply_dist_rules(
+    prepared_df,
+    rules$dist_rules,
+    scenario_id,
+    mff_split_enabled = mff_split_enabled,
+    mff_split_pct = mff_split_pct
+  )
+  plan <- apply_amount_map(
+    plan,
+    rules$amount_map,
+    mff_rate,
+    mff_split_enabled = mff_split_enabled,
+    mff_split_pct = mff_split_pct
+  )
   plan <- apply_routing(plan, rules$routing_rules)
   plan <- resolve_entities(plan)
   

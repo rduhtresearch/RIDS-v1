@@ -32,6 +32,8 @@ appServer <- function(id, auth_state, current_step) {
       posting_plan    = NULL,
       processed_ict   = NULL,
       edge_templates  = NULL,
+      include_screening_failure = FALSE,
+      screening_failure_arm = NULL,
       current_step    = NULL,
       timestamp       = NULL,
       current_study   = NULL,
@@ -56,6 +58,8 @@ appServer <- function(id, auth_state, current_step) {
       shared_state$posting_plan <- NULL
       shared_state$processed_ict <- NULL
       shared_state$edge_templates <- NULL
+      shared_state$include_screening_failure <- FALSE
+      shared_state$screening_failure_arm <- NULL
       shared_state$current_step <- NULL
       shared_state$timestamp <- NULL
       shared_state$current_study <- NULL

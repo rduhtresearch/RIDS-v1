@@ -108,4 +108,7 @@ run_test_result("test_step2_filters.R", run_step2_filter_tests)
 source(file.path(repo_dir, "R/tests/test_contract_cost_source_of_truth.R"), local = FALSE)
 run_test_result("test_contract_cost_source_of_truth.R", run_contract_cost_source_of_truth_tests)
 
+source(file.path(repo_dir, "R/tests/test_release_workflow.R"), local = FALSE)
+run_test_result("test_release_workflow.R", run_release_workflow_tests)
+
 message("All CI checks passed.")

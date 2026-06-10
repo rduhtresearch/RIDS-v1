@@ -208,45 +208,25 @@ if (db_already_exists) {
 }
 
 # ------------------------------------------------------------------------------
-# 6. Bootstrap the first release if HEAD is already tagged
+# 6. Bootstrap the first release from the current working tree
 # ------------------------------------------------------------------------------
 current_release <- read_release_pointer(current_release_path)
 
 if (!nzchar(current_release)) {
-  head_tag <- git_exact_tag(APP_DIR, "HEAD")
+  bootstrap_version <- default_bootstrap_release_version()
+  bootstrap_release_dir <- file.path(RELEASES_DIR, bootstrap_version)
 
-  if (nzchar(head_tag)) {
-    initial_release_dir <- file.path(RELEASES_DIR, head_tag)
-    if (!file.exists(file.path(initial_release_dir, "app.R"))) {
-      export_git_snapshot(APP_DIR, head_tag, initial_release_dir, overwrite = FALSE)
-    }
-    run_release_smoke_check(initial_release_dir, deployment_config_path)
-    write_release_pointer(current_release_path, head_tag)
-    append_deploy_log(
-      deploy_log_path,
-      action = "bootstrap",
-      version = head_tag,
-      status = "success",
-      message = "Initial release created during setup."
-    )
-    message("Initial release bootstrapped from Git tag: ", head_tag)
-  } else {
-    bootstrap_version <- default_bootstrap_release_version()
-    bootstrap_release_dir <- file.path(RELEASES_DIR, bootstrap_version)
-
-    export_working_tree_snapshot(APP_DIR, bootstrap_release_dir, overwrite = TRUE)
-    run_release_smoke_check(bootstrap_release_dir, deployment_config_path)
-    write_release_pointer(current_release_path, bootstrap_version)
-    append_deploy_log(
-      deploy_log_path,
-      action = "bootstrap",
-      version = bootstrap_version,
-      status = "success",
-      message = "Initial release created from the current working tree during setup."
-    )
-    message("Initial release bootstrapped from the current working tree: ", bootstrap_version)
-    message("You can tag and publish a formal release later if needed.")
-  }
+  export_working_tree_snapshot(APP_DIR, bootstrap_release_dir, overwrite = TRUE)
+  run_release_smoke_check(bootstrap_release_dir, deployment_config_path)
+  write_release_pointer(current_release_path, bootstrap_version)
+  append_deploy_log(
+    deploy_log_path,
+    action = "bootstrap",
+    version = bootstrap_version,
+    status = "success",
+    message = "Initial release created from the current working tree during setup."
+  )
+  message("Initial release bootstrapped from the current working tree: ", bootstrap_version)
 } else {
   message("Current active release already set to: ", current_release)
 }
@@ -262,4 +242,4 @@ message("1. Open: ", launcher_bat_path)
 message("2. Wait for the browser to open.")
 message("3. On first launch, create the first admin account in the app.")
 message("4. On each Windows laptop, run deployment/Prepare RIDS.bat once before daily use.")
-message("5. Later, tag and publish a formal release with R/SETUP/release_publish.R if needed.")
+message("5. Later, publish a new manual release with R/SETUP/release_publish.R publish-local --version vX.Y.Z if needed.")

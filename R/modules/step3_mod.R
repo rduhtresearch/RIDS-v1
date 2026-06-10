@@ -41,12 +41,14 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
         posting_ict <- tryCatch({
           duplicate_screening_failure_sheets(
             shared_state$processed_ict,
-            include_screening_failure = isTRUE(shared_state$include_screening_failure)
+            include_screening_failure = isTRUE(shared_state$include_screening_failure),
+            screening_failure_arm = shared_state$screening_failure_arm
           )
         }, error = function(e) {
           app_log_exception("step3", "Screening failure source duplication failed", e, list(
             cpms_id = shared_state$cpms_id,
-            include_screening_failure = isTRUE(shared_state$include_screening_failure)
+            include_screening_failure = isTRUE(shared_state$include_screening_failure),
+            screening_failure_arm = shared_state$screening_failure_arm
           ))
           showNotification("Failed to prepare Screening Failure rows", type = "error")
           return(NULL)
@@ -191,12 +193,61 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
           details = list(rows = nrow(working_data$df))
         )
         app_log_info("step3", "Posting evaluation started")
+
+        study_mff_config <- tryCatch({
+          cfg <- DBI::dbGetQuery(
+            CON,
+            paste(
+              "SELECT mff_split_enabled, mff_split_pct",
+              "FROM meta_data",
+              "WHERE cpms_id = ? AND study_site = ? AND scenario_id = ?",
+              "LIMIT 1"
+            ),
+            params = list(
+              as.character(shared_state$cpms_id),
+              as.character(shared_state$study_site),
+              as.character(shared_state$scenario_id)
+            )
+          )
+
+          if (nrow(cfg) == 0) {
+            list(mff_split_enabled = FALSE, mff_split_pct = 0)
+          } else {
+            list(
+              mff_split_enabled = isTRUE(cfg$mff_split_enabled[[1]]),
+              mff_split_pct = as.numeric(cfg$mff_split_pct[[1]] %||% 0)
+            )
+          }
+        }, error = function(e) {
+          if (handle_fatal_db_error(session, e, "step3", list(
+            cpms_id = shared_state$cpms_id,
+            upload_id = shared_state$upload_id,
+            stage = "load_mff_split_config"
+          ))) {
+            is_saved(FALSE)
+            w$hide()
+            return(NULL)
+          }
+
+          app_log_exception("step3", "Study MFF split config lookup failed", e, list(
+            cpms_id = shared_state$cpms_id,
+            upload_id = shared_state$upload_id
+          ))
+          showNotification("Failed to load study finance configuration", type = "error")
+          is_saved(FALSE)
+          w$hide()
+          return(NULL)
+        })
+
+        req(study_mff_config)
         
         evaluated <- tryCatch({
           evaluate_posting_plan(
             prepared_df = working_data$df,
             rules_db_path = DB_DIR,
-            scenario_id = "A"
+            scenario_id = shared_state$scenario_id,
+            mff_split_enabled = study_mff_config$mff_split_enabled,
+            mff_split_pct = study_mff_config$mff_split_pct
           )
         }, error = function(e) {
           if (handle_fatal_db_error(session, e, "step3", list(

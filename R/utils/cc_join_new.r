@@ -7,7 +7,9 @@ speciality_code = '58109'
 # File paths
 #df <- read_csv('/Users/tategraham/Downloads/Book7(Sheet1).csv')
 #df <- read_csv("/Users/tategraham/Downloads/Book8(Sheet1)-2.csv")
-df <- read_csv('/Users/tategraham/Downloads/Book10(Sheet1).csv')
+#df <- read_csv('/Users/tategraham/Downloads/Book10(Sheet1).csv')
+#df <- read_csv('/Users/tategraham/Downloads/Book10(Sheet1)-2.csv')
+df <- read_csv("/Users/tategraham/Downloads/Book10(Sheet1)-3.csv")
 
 
 #posting_lines <- read_csv("/Users/tategraham/Downloads/75743_RDUHT_test_posting_lines_20260601_163338.csv")
@@ -15,7 +17,8 @@ df <- read_csv('/Users/tategraham/Downloads/Book10(Sheet1).csv')
 #posting_lines <- read_csv("/Users/tategraham/Downloads/66795_NDDHT_t_posting_lines_20260603_155312.csv")
 #posting_lines <- read_csv("/Users/tategraham/Downloads/58449_NDDHT_test5_posting_lines_20260604_150208.csv")
 #posting_lines <- read_csv("/Users/tategraham/Downloads/58449_RDUHT_test_posting_lines_20260604_160630.csv")
-posting_lines <- read_csv("/Users/tategraham/Downloads/58449_RDUHT_test_posting_lines_20260604_161726.csv")
+#posting_lines <- read_csv("/Users/tategraham/Downloads/58449_RDUHT_test_posting_lines_20260604_161726.csv")
+posting_lines <- read_csv("/Users/tategraham/Downloads/60454_RDUHT_MK-4482_posting_lines_20260605_122051.csv")
 
 
 
@@ -31,22 +34,25 @@ df <- df |> rename(
   'INDIRECT_25_TRUST'    = `INDIRECT_25 [O/Hs]`,
   'INDIRECT_25_PI'       = `INDIRECT_25 [PI CB]`,
   'INDIRECT_50_DELIVERY' = INDIRECT_50,
-  'CAPACITY_RD'          = RD_CAPACITY
+  'CAPACITY_RD'          = RD_CAPACITY,
+  'DIRECT_40_PI'         = TRD40,
+  'DIRECT_60_TEAM'       = TRD60
 )
 
 
 # Transpose data to create row per split type
 df_long <- df %>%
   mutate(across(
-    c(DIRECT, INDIRECT_50_DELIVERY, INDIRECT_25_TRUST, INDIRECT_25_PI, CAPACITY_RD),
+    c(DIRECT, INDIRECT_50_DELIVERY, INDIRECT_25_TRUST, INDIRECT_25_PI, CAPACITY_RD, DIRECT_40_PI, DIRECT_60_TEAM),
     as.character
   )) %>%
   pivot_longer(
-    cols      = c(DIRECT, INDIRECT_50_DELIVERY, INDIRECT_25_TRUST, INDIRECT_25_PI, CAPACITY_RD),
+    cols      = c(DIRECT, INDIRECT_50_DELIVERY, INDIRECT_25_TRUST, INDIRECT_25_PI, CAPACITY_RD, DIRECT_40_PI, DIRECT_60_TEAM),
     names_to  = "cost_type",
     values_to = "cost_code"
   ) %>%
   filter(!is.na(cost_code), cost_code != "")
+
 
 
 # // Column Mapping

@@ -458,6 +458,20 @@ run_contract_cost_source_of_truth_tests <- function() {
       scenario_id = c("A", "A", "A"),
       staff_group = c(1L, 1L, 2L)
     ),
+    `Arm B` = tibble(
+      Study_Arm = c("Arm B", "Arm B"),
+      Visit = c("VISIT - 001", "VISIT - 003"),
+      Visit_Label = c("Baseline", "Visit 3"),
+      Activity = c("Visit Summary", "Visit Summary"),
+      Activity.Type = c("Visit", "Visit"),
+      Staff.Role = c("Coordinator", "Coordinator"),
+      Activity.Cost = c("200", "240"),
+      study_name = c("Study A", "Study A"),
+      cpms_id = c("CP1", "CP1"),
+      study_site = c("RDUHT", "RDUHT"),
+      scenario_id = c("A", "A"),
+      staff_group = c(1L, 1L)
+    ),
     `Unscheduled Activities` = tibble(
       Study_Arm = "UA",
       Visit = "VISIT - 001",
@@ -474,21 +488,51 @@ run_contract_cost_source_of_truth_tests <- function() {
     )
   )
 
+  .expect("screening arm candidates keep workbook tab order",
+          identical(
+            screening_failure_candidate_sheets(names(screening_source)),
+            c("Arm A", "Arm B")
+          ))
+  .expect("screening arm resolver defaults to the first eligible main tab",
+          identical(resolve_screening_failure_arm(names(screening_source)), "Arm A"))
+  .expect("screening arm resolver accepts a valid manual override",
+          identical(resolve_screening_failure_arm(names(screening_source), "Arm B"), "Arm B"))
+  .expect("screening arm resolver ignores invalid overrides",
+          identical(resolve_screening_failure_arm(names(screening_source), "Missing Arm"), "Arm A"))
+
   duplicated_source <- duplicate_screening_failure_sheets(
     screening_source,
     include_screening_failure = TRUE
   )
-  .expect("processed ICT duplication creates a screening sheet per main arm",
-          "Arm A - SCREENING VISIT" %in% names(duplicated_source))
+  .expect("processed ICT duplication creates one screening failure sheet for the first main arm",
+          "Arm A - SCREENING FAILURE" %in% names(duplicated_source))
+  .expect("processed ICT duplication does not create a screening failure sheet for later arms",
+          !"Arm B - SCREENING FAILURE" %in% names(duplicated_source))
   .expect("processed ICT duplication only copies first-visit rows",
           identical(
-            duplicated_source[["Arm A - SCREENING VISIT"]]$Visit,
+            duplicated_source[["Arm A - SCREENING FAILURE"]]$Visit,
             c("VISIT - 001", "VISIT - 001")
           ))
   .expect("processed ICT duplication preserves per-activity source costs",
           identical(
-            duplicated_source[["Arm A - SCREENING VISIT"]]$Activity.Cost,
+            duplicated_source[["Arm A - SCREENING FAILURE"]]$Activity.Cost,
             c("100", "25")
+          ))
+  manual_override_source <- duplicate_screening_failure_sheets(
+    screening_source,
+    include_screening_failure = TRUE,
+    screening_failure_arm = "Arm B"
+  )
+  .expect("processed ICT duplication supports manual arm override",
+          "Arm B - SCREENING FAILURE" %in% names(manual_override_source))
+  .expect("screening duplication is a no-op for an invalid arm override",
+          identical(
+            duplicate_screening_failure_sheets(
+              screening_source,
+              include_screening_failure = TRUE,
+              screening_failure_arm = "Missing Arm"
+            ),
+            duplicated_source
           ))
 
   screening_prepared <- join_ict_costs(
@@ -504,7 +548,7 @@ run_contract_cost_source_of_truth_tests <- function() {
   .expect("screening prepared rows keep the saved contract targets",
           identical(
             screening_prepared %>%
-              filter(sheet_name == "Arm A - SCREENING VISIT") %>%
+              filter(sheet_name == "Arm A - SCREENING FAILURE") %>%
               arrange(Activity, staff_group) %>%
               pull(contract_cost),
             c(25, 2032)
@@ -512,9 +556,9 @@ run_contract_cost_source_of_truth_tests <- function() {
   .expect("screening prepared rows use the synthetic sheet as the main arm identity",
           identical(
             screening_prepared %>%
-              filter(sheet_name == "Arm A - SCREENING VISIT", Study_Arm != "SSP") %>%
+              filter(sheet_name == "Arm A - SCREENING FAILURE", Study_Arm != "SSP") %>%
               pull(Study_Arm),
-            "Arm A - SCREENING VISIT"
+            "Arm A - SCREENING FAILURE"
           ))
 
   screening_enabled <- tibble(
@@ -551,9 +595,9 @@ run_contract_cost_source_of_truth_tests <- function() {
     destination_entity = rep("R&D", 8),
     cost_code = NA_character_,
     sheet_name = c(
-      rep("Arm A - SCREENING VISIT", 6),
+      rep("Arm A - SCREENING FAILURE", 6),
       "Arm A",
-      "Arm B - SCREENING VISIT"
+      "Arm B"
     ),
     Visit_Label = c(
       rep("Screening", 6),
@@ -584,9 +628,11 @@ run_contract_cost_source_of_truth_tests <- function() {
   )
 
   .expect("screening failure rows survive adjustment and EDGE key assignment",
-          all(!is.na(screening_keyed$edge_key[grepl("SCREENING VISIT$", screening_keyed$sheet_name)])))
+          all(!is.na(screening_keyed$edge_key[grepl("SCREENING FAILURE$", screening_keyed$sheet_name)])))
   .expect("screening failure templates are built as ordinary main-arm tabs",
-          all(c("Arm A - SCREENING VISIT", "Arm B - SCREENING VISIT") %in% names(screening_templates)))
+          "Arm A - SCREENING FAILURE" %in% names(screening_templates))
+  .expect("later arms do not get screening failure templates",
+          !"Arm B - SCREENING FAILURE" %in% names(screening_templates))
   .expect("ordinary main-arm templates still roll up by visit",
           identical(
             screening_templates[["Arm A"]]$`Cost Item Description`,
@@ -594,7 +640,7 @@ run_contract_cost_source_of_truth_tests <- function() {
           ))
   .expect("screening templates are itemised per duplicated source row",
           identical(
-            screening_templates[["Arm A - SCREENING VISIT"]]$`Cost Item Description`,
+            screening_templates[["Arm A - SCREENING FAILURE"]]$`Cost Item Description`,
             c(
               "VISIT - 001 - Screening - Informed consent",
               "VISIT - 001 - Screening - Informed consent",
@@ -603,26 +649,26 @@ run_contract_cost_source_of_truth_tests <- function() {
           ))
   .expect("repeated screening source rows remain separate in the template",
           sum(
-            screening_templates[["Arm A - SCREENING VISIT"]]$`Cost Item Description` ==
+            screening_templates[["Arm A - SCREENING FAILURE"]]$`Cost Item Description` ==
               "VISIT - 001 - Screening - Informed consent"
           ) == 2L)
   .expect("screening failure rows get distinct itemised EDGE keys",
           dplyr::n_distinct(
-            screening_keyed$edge_key[screening_keyed$sheet_name == "Arm A - SCREENING VISIT"]
+            screening_keyed$edge_key[screening_keyed$sheet_name == "Arm A - SCREENING FAILURE"]
           ) == 3L)
   expected_screening_costs <- screening_keyed %>%
-    filter(sheet_name == "Arm A - SCREENING VISIT") %>%
+    filter(sheet_name == "Arm A - SCREENING FAILURE") %>%
     summarise(total = sum(adjusted_amount), .by = c(row_id, Activity, staff_group, edge_key)) %>%
     arrange(row_id, staff_group) %>%
     pull(total)
   .expect("screening template costs are grouped adjusted_amount sums",
           identical(
-            screening_templates[["Arm A - SCREENING VISIT"]]$`Default Cost`,
+            screening_templates[["Arm A - SCREENING FAILURE"]]$`Default Cost`,
             expected_screening_costs
           ))
   .expect("screening template costs reconcile to the duplicated visit total",
           identical(
-            round(sum(screening_templates[["Arm A - SCREENING VISIT"]]$`Default Cost`), 2),
+            round(sum(screening_templates[["Arm A - SCREENING FAILURE"]]$`Default Cost`), 2),
             2032
           ))
 
