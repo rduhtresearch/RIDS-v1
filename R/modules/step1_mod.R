@@ -16,6 +16,19 @@ step1_UI <- function(id) {
       textInput(ns('edge_id'), 'EDGE ID'),
       textInput(ns('study_name'), 'Study Name'),
       checkboxInput(
+        ns("mff_split_enabled"),
+        "Use new MFF split",
+        value = FALSE
+      ),
+      numericInput(
+        ns("mff_split_pct"),
+        "MFF split percentage",
+        value = 0.25,
+        min = 0,
+        max = 1,
+        step = 0.01
+      ),
+      checkboxInput(
         ns("include_screening_failure"),
         "Generate Screening Failure EDGE templates",
         value = FALSE
@@ -37,6 +50,8 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       updateSelectInput(session, "speciality_id", selected = "")
       updateTextInput(session, "edge_id", value = "")
       updateTextInput(session, "study_name", value = "")
+      updateCheckboxInput(session, "mff_split_enabled", value = FALSE)
+      updateNumericInput(session, "mff_split_pct", value = 0.25)
       updateCheckboxInput(session, "include_screening_failure", value = FALSE)
       updateTextAreaInput(session, "notes", value = "")
       session$sendCustomMessage("resetFileInput", list(id = session$ns("upload")))
@@ -45,6 +60,7 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       feedbackDanger("upload", show = FALSE)
       feedbackDanger("study_site", show = FALSE)
       feedbackDanger("speciality_id", show = FALSE)
+      feedbackDanger("mff_split_pct", show = FALSE)
     }
 
     session$userData$reset_step1_form <- reset_step1_form
@@ -71,6 +87,14 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
         "speciality_id",
         choices  = c("Select speciality..." = "", choices),
         selected = ""
+      )
+    })
+
+    observe({
+      shinyjs::toggle(
+        id = "mff_split_pct",
+        condition = isTRUE(input$mff_split_enabled),
+        anim = TRUE
       )
     })
     
@@ -115,6 +139,13 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
                      text = "Required")
       feedbackDanger("speciality_id", show = is.null(input$speciality_id) || input$speciality_id == "",
                      text = "Required")
+      feedbackDanger(
+        "mff_split_pct",
+        show = isTRUE(input$mff_split_enabled) &&
+          (is.null(input$mff_split_pct) || is.na(input$mff_split_pct) ||
+             input$mff_split_pct < 0 || input$mff_split_pct > 1),
+        text = "Enter a value between 0 and 1"
+      )
       
       req(
         input$edge_id != "",
@@ -123,7 +154,10 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
         input$study_site != "",
         !is.null(input$upload),
         !is.null(input$speciality_id),
-        input$speciality_id != ""
+        input$speciality_id != "",
+        !isTRUE(input$mff_split_enabled) ||
+          (!is.null(input$mff_split_pct) && !is.na(input$mff_split_pct) &&
+             input$mff_split_pct >= 0 && input$mff_split_pct <= 1)
       )
 
       log_event(
@@ -138,7 +172,9 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
           study_site = input$study_site,
           edge_id = input$edge_id,
           original_filename = input$upload$name,
-          speciality_id = as.integer(input$speciality_id)
+          speciality_id = as.integer(input$speciality_id),
+          mff_split_enabled = isTRUE(input$mff_split_enabled),
+          mff_split_pct = if (isTRUE(input$mff_split_enabled)) as.numeric(input$mff_split_pct) else 0
         )
       )
       app_log_info("step1", "Upload started")
@@ -326,8 +362,8 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
         DBI::dbExecute(CON,
                      "INSERT INTO meta_data 
    (cpms_id, study_site, scenario_id, edge_id, study_name, notes, uploaded_by, 
-    original_filename, saved_file_path, speciality_id)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    original_filename, saved_file_path, speciality_id, mff_split_enabled, mff_split_pct)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      params = list(
                        sanitize_text_value(as.character(extracted_cpms)),
                        sanitize_text_value(input$study_site),
@@ -338,7 +374,9 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
                        sanitize_text_value(auth_state$username %||% auth_state$name %||% ""),
                        sanitize_text_value(original_name),
                        sanitize_text_value(saved_path),
-                       as.integer(input$speciality_id)
+                       as.integer(input$speciality_id),
+                       isTRUE(input$mff_split_enabled),
+                       if (isTRUE(input$mff_split_enabled)) as.numeric(input$mff_split_pct) else 0
                      )
         )
         TRUE
@@ -441,12 +479,16 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       shared_state$scenario_id      <- input$scenario
       shared_state$study_site       <- input$study_site
       shared_state$include_screening_failure <- isTRUE(input$include_screening_failure)
+      shared_state$mff_split_enabled <- isTRUE(input$mff_split_enabled)
+      shared_state$mff_split_pct <- if (isTRUE(input$mff_split_enabled)) as.numeric(input$mff_split_pct) else 0
       shared_state$speciality_id    <- sp_id
       shared_state$speciality_name  <- sp_name
       shared_state$study_name       <- input$study_name
       shared_state$upload_meta      <- list(
         scenario_id     = input$scenario,
         study_site      = input$study_site,
+        mff_split_enabled = isTRUE(input$mff_split_enabled),
+        mff_split_pct   = if (isTRUE(input$mff_split_enabled)) as.numeric(input$mff_split_pct) else 0,
         include_screening_failure = isTRUE(input$include_screening_failure),
         edge_id         = input$edge_id,
         study_name      = input$study_name,

@@ -67,7 +67,9 @@ meta_table <- function() {
       original_filename VARCHAR,
       saved_file_path   VARCHAR,
       speciality_id     INTEGER,
-      edge_zip_path     VARCHAR
+      edge_zip_path     VARCHAR,
+      mff_split_enabled BOOLEAN DEFAULT FALSE,
+      mff_split_pct     DOUBLE DEFAULT 0
     );"
   )
   
@@ -89,6 +91,15 @@ meta_table <- function() {
   if (!"edge_zip_path" %in% meta_cols) {
     dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN edge_zip_path VARCHAR;")
   }
+  if (!"mff_split_enabled" %in% meta_cols) {
+    dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN mff_split_enabled BOOLEAN DEFAULT FALSE;")
+  }
+  if (!"mff_split_pct" %in% meta_cols) {
+    dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN mff_split_pct DOUBLE DEFAULT 0;")
+  }
+
+  dbExecute(CON, "UPDATE meta_data SET mff_split_enabled = FALSE WHERE mff_split_enabled IS NULL;")
+  dbExecute(CON, "UPDATE meta_data SET mff_split_pct = 0 WHERE mff_split_pct IS NULL;")
 
   dbExecute(CON, "
     CREATE UNIQUE INDEX IF NOT EXISTS idx_meta_data_unique_study_identity
@@ -215,6 +226,16 @@ seed_users <- function() {
 build_rules_tables <- function() {
   # 4) Helper to run SQL quickly
   exec_sql <- function(sql) dbExecute(CON, sql)
+  upsert_rule_row <- function(table, key_col, key_val, sql, params) {
+    exists <- dbGetQuery(
+      CON,
+      paste0("SELECT 1 FROM ", table, " WHERE ", key_col, " = ? LIMIT 1"),
+      params = list(key_val)
+    )
+    if (nrow(exists) == 0) {
+      dbExecute(CON, sql, params = params)
+    }
+  }
 
   # 5) Create tables (idempotent)
   # 5.1) Ruleset/version container
@@ -268,6 +289,7 @@ build_rules_tables <- function() {
       base_mult DOUBLE NOT NULL,
       split_mult DOUBLE NOT NULL,
       applies_to_row_category TEXT NOT NULL,
+      calc_method TEXT NOT NULL DEFAULT 'STANDARD',
       notes TEXT,
       FOREIGN KEY (posting_line_type_id) REFERENCES posting_line_types(posting_line_type_id)
     );
@@ -291,55 +313,99 @@ build_rules_tables <- function() {
     );
   ")
   
-  # 6) Seed base reference data (only on first run)
-  if (dbGetQuery(CON, "SELECT COUNT(*) AS n FROM rulesets")$n > 0) {
-    return(invisible(NULL))
+  amount_cols <- dbListFields(CON, "amount_map")
+  if (!"calc_method" %in% amount_cols) {
+    exec_sql("ALTER TABLE amount_map ADD COLUMN calc_method TEXT DEFAULT 'STANDARD';")
   }
+  exec_sql("UPDATE amount_map SET calc_method = 'STANDARD' WHERE calc_method IS NULL;")
 
-  exec_sql("
-    INSERT INTO rulesets (ruleset_id, name, version, notes)
-    VALUES ('COMM_AH_V1', 'Commercial Rules A–H', 'v1', 'A–H scenarios; MFF fixed at runtime param for MVP');
-  ")
+  upsert_rule_row(
+    "rulesets",
+    "ruleset_id",
+    "COMM_AH_V1",
+    "
+      INSERT INTO rulesets (ruleset_id, name, version, notes)
+      VALUES (?, ?, ?, ?)
+    ",
+    list("COMM_AH_V1", "Commercial Rules A–H", "v1", "A–H scenarios; MFF fixed at runtime param for MVP")
+  )
   
-  exec_sql("
-    INSERT INTO provider_orgs (provider_org) VALUES
-    ('RDUHT'), ('CRF'), ('DPT'), ('UoE');
-  ")
+  for (org in c("RDUHT", "CRF", "DPT", "UoE")) {
+    upsert_rule_row(
+      "provider_orgs",
+      "provider_org",
+      org,
+      "INSERT INTO provider_orgs (provider_org) VALUES (?)",
+      list(org)
+    )
+  }
   
-  exec_sql("
-    INSERT INTO posting_line_types (posting_line_type_id, label) VALUES
-    ('DIRECT', 'Direct Cost'),
-    ('DIRECT_40_PI', 'Direct Cost 40% (PI)'),
-    ('DIRECT_60_TEAM', 'Direct Cost 60% (Delivery/Team)'),
-    ('CAPACITY_RD', 'Capacity (R&D)'),
-    ('INDIRECT_50_DELIVERY', 'Indirect 50% (Delivery/Support)'),
-    ('INDIRECT_25_TRUST', 'Indirect 25% (Trust Overhead)'),
-    ('INDIRECT_25_PI', 'Indirect 25% (PI)');
-  ")
+  posting_line_type_rows <- list(
+    list("DIRECT", "Direct Cost"),
+    list("DIRECT_40_PI", "Direct Cost 40% (PI)"),
+    list("DIRECT_60_TEAM", "Direct Cost 60% (Delivery/Team)"),
+    list("CAPACITY_RD", "Capacity (R&D)"),
+    list("INDIRECT_50_DELIVERY", "Indirect 50% (Delivery/Support)"),
+    list("INDIRECT_25_TRUST", "Indirect 25% (Trust Overhead)"),
+    list("INDIRECT_25_PI", "Indirect 25% (PI)"),
+    list("MFF_SPLIT_NEW_CC", "MFF Split to New Cost Centre")
+  )
   
-  # 8) Seed amount_map (math parameters)
-  exec_sql("INSERT INTO amount_map VALUES ('DIRECT', 1.0, 1.0, 'BOTH', 'AC * mff');")
-  exec_sql("INSERT INTO amount_map VALUES ('CAPACITY_RD', 0.2, 1.0, 'BOTH', 'AC * 0.2 * mff');")
-  exec_sql("INSERT INTO amount_map VALUES ('INDIRECT_50_DELIVERY', 0.7, 0.5, 'BASELINE', 'AC * 0.7 * mff * 0.5');")
-  exec_sql("INSERT INTO amount_map VALUES ('INDIRECT_25_TRUST', 0.7, 0.25, 'BASELINE', 'AC * 0.7 * mff * 0.25');")
-  exec_sql("INSERT INTO amount_map VALUES ('INDIRECT_25_PI', 0.7, 0.25, 'BASELINE', 'AC * 0.7 * mff * 0.25');")
-  exec_sql("INSERT INTO amount_map VALUES ('DIRECT_40_PI', 1.0, 0.4, 'BASELINE', 'AC * mff * 0.4 (TRD medic split)');")
-  exec_sql("INSERT INTO amount_map VALUES ('DIRECT_60_TEAM', 1.0, 0.6, 'BASELINE', 'AC * mff * 0.6 (TRD medic split)');")
+  for (row in posting_line_type_rows) {
+    upsert_rule_row(
+      "posting_line_types",
+      "posting_line_type_id",
+      row[[1]],
+      "INSERT INTO posting_line_types (posting_line_type_id, label) VALUES (?, ?)",
+      row
+    )
+  }
+  
+  amount_map_rows <- list(
+    list("DIRECT", 1.0, 1.0, "BOTH", "STANDARD", "AC * mff"),
+    list("CAPACITY_RD", 0.2, 1.0, "BOTH", "STANDARD", "AC * 0.2 * mff"),
+    list("INDIRECT_50_DELIVERY", 0.7, 0.5, "BASELINE", "STANDARD", "AC * 0.7 * mff * 0.5"),
+    list("INDIRECT_25_TRUST", 0.7, 0.25, "BASELINE", "STANDARD", "AC * 0.7 * mff * 0.25"),
+    list("INDIRECT_25_PI", 0.7, 0.25, "BASELINE", "STANDARD", "AC * 0.7 * mff * 0.25"),
+    list("DIRECT_40_PI", 1.0, 0.4, "BASELINE", "STANDARD", "AC * mff * 0.4 (TRD medic split)"),
+    list("DIRECT_60_TEAM", 1.0, 0.6, "BASELINE", "STANDARD", "AC * mff * 0.6 (TRD medic split)"),
+    list("MFF_SPLIT_NEW_CC", 0.0, 0.0, "BOTH", "MFF_SPLIT_ONLY", "Calculated from total pre-MFF base x uplift x split pct")
+  )
+  
+  for (row in amount_map_rows) {
+    upsert_rule_row(
+      "amount_map",
+      "posting_line_type_id",
+      row[[1]],
+      "
+        INSERT INTO amount_map
+          (posting_line_type_id, base_mult, split_mult, applies_to_row_category, calc_method, notes)
+        VALUES (?, ?, ?, ?, ?, ?)
+      ",
+      row
+    )
+  }
   
   # 9) Seed dist_rules
   insert_dist_rule <- function(id, scenario, row_category, posting_line, priority,
                                condition_field = NA, condition_op = NA, condition_value = NA, notes = NA) {
-    dbExecute(CON, "
-      INSERT INTO dist_rules
-        (dist_rule_id, ruleset_id, scenario_id, row_category,
-         condition_field, condition_op, condition_value,
-         posting_line_type_id, priority, notes)
-      VALUES (?, 'COMM_AH_V1', ?, ?, ?, ?, ?, ?, ?, ?)
-    ", params = list(
-      id, scenario, row_category,
-      condition_field, condition_op, condition_value,
-      posting_line, priority, notes
-    ))
+    upsert_rule_row(
+      "dist_rules",
+      "dist_rule_id",
+      id,
+      "
+        INSERT INTO dist_rules
+          (dist_rule_id, ruleset_id, scenario_id, row_category,
+           condition_field, condition_op, condition_value,
+           posting_line_type_id, priority, notes)
+        VALUES (?, 'COMM_AH_V1', ?, ?, ?, ?, ?, ?, ?, ?)
+      ",
+      list(
+        id, scenario, row_category,
+        condition_field, condition_op, condition_value,
+        posting_line, priority, notes
+      )
+    )
   }
   
   # 9.1) Rule Vectors
@@ -347,27 +413,31 @@ build_rules_tables <- function() {
   invest_std <- c("DIRECT", "CAPACITY_RD")
   training_std <- baseline_std
   setup_close_departmental_std <- c("DIRECT")
+  baseline_std_mff <- c(baseline_std, "MFF_SPLIT_NEW_CC")
+  invest_std_mff <- c(invest_std, "MFF_SPLIT_NEW_CC")
+  training_std_mff <- c(training_std, "MFF_SPLIT_NEW_CC")
+  setup_close_departmental_std_mff <- c(setup_close_departmental_std, "MFF_SPLIT_NEW_CC")
   
   # 9.2) Scenarios like A
   like_A <- c("A", "C", "E", "G", "H")
   for (sc in like_A) {
     pr <- 10
-    for (pl in baseline_std) {
+    for (pl in baseline_std_mff) {
       insert_dist_rule(paste0(sc, "_BASE_", pl), sc, "BASELINE", pl, pr)
       pr <- pr + 10
     }
     pr <- 10
-    for (pl in invest_std) {
+    for (pl in invest_std_mff) {
       insert_dist_rule(paste0(sc, "_INV_", pl), sc, "INVESTIGATION", pl, pr)
       pr <- pr + 10
     }
     pr <- 10
-    for (pl in training_std) {
+    for (pl in training_std_mff) {
       insert_dist_rule(paste0(sc, "_TRAIN_", pl), sc, "TRAINING_FEE", pl, pr)
       pr <- pr + 10
     }
     pr <- 10
-    for (pl in setup_close_departmental_std) {
+    for (pl in setup_close_departmental_std_mff) {
       insert_dist_rule(
         paste0(sc, "_SETUPCLOSE_DEPT_", pl),
         sc,
@@ -386,7 +456,7 @@ build_rules_tables <- function() {
   for (sc in trd_scenarios) {
     
     pr <- 20
-    for (pl in baseline_std) {
+    for (pl in baseline_std_mff) {
       insert_dist_rule(paste0(sc, "_BASE_NONMED_", pl), sc, "BASELINE", pl, pr,
                        condition_field = "is_medic", condition_op = "=", condition_value = "FALSE",
                        notes = "TRD scenario: non-medic baseline uses standard direct")
@@ -394,14 +464,14 @@ build_rules_tables <- function() {
     }
     
     pr_train <- 10
-    for (pl in baseline_std) {
+    for (pl in training_std_mff) {
       insert_dist_rule(paste0(sc, "_TRAIN_", pl), sc, "TRAINING_FEE", pl, pr_train)
       pr_train <- pr_train + 10
     }
     
     # Setup & Closedown Departmental costs: direct only
     pr_setup <- 10
-    for (pl in setup_close_departmental_std) {
+    for (pl in setup_close_departmental_std_mff) {
       insert_dist_rule(
         paste0(sc, "_SETUPCLOSE_DEPT_", pl),
         sc,
@@ -427,25 +497,34 @@ build_rules_tables <- function() {
                      condition_field = "is_medic", condition_op = "=", condition_value = "TRUE")
     insert_dist_rule(paste0(sc, "_BASE_MED_I25P"), sc, "BASELINE", "INDIRECT_25_PI", 50,
                      condition_field = "is_medic", condition_op = "=", condition_value = "TRUE")
+    insert_dist_rule(paste0(sc, "_BASE_MED_MFF"), sc, "BASELINE", "MFF_SPLIT_NEW_CC", 60,
+                     condition_field = "is_medic", condition_op = "=", condition_value = "TRUE")
     
     insert_dist_rule(paste0(sc, "_INV_DIRECT"), sc, "INVESTIGATION", "DIRECT", 10)
     insert_dist_rule(paste0(sc, "_INV_CAP"), sc, "INVESTIGATION", "CAPACITY_RD", 20)
+    insert_dist_rule(paste0(sc, "_INV_MFF"), sc, "INVESTIGATION", "MFF_SPLIT_NEW_CC", 30)
   }
   
   # 10) Seed routing_rules
   insert_routing <- function(id, scenario, posting_line, dest_bucket, priority,
                              condition_field = NA, condition_op = NA, condition_value = NA, notes = NA) {
-    dbExecute(CON, "
-      INSERT INTO routing_rules
-        (routing_rule_id, ruleset_id, scenario_id,
-         condition_field, condition_op, condition_value,
-         posting_line_type_id, destination_bucket, priority, notes)
-      VALUES (?, 'COMM_AH_V1', ?, ?, ?, ?, ?, ?, ?, ?)
-    ", params = list(
-      id, scenario,
-      condition_field, condition_op, condition_value,
-      posting_line, dest_bucket, priority, notes
-    ))
+    upsert_rule_row(
+      "routing_rules",
+      "routing_rule_id",
+      id,
+      "
+        INSERT INTO routing_rules
+          (routing_rule_id, ruleset_id, scenario_id,
+           condition_field, condition_op, condition_value,
+           posting_line_type_id, destination_bucket, priority, notes)
+        VALUES (?, 'COMM_AH_V1', ?, ?, ?, ?, ?, ?, ?, ?)
+      ",
+      list(
+        id, scenario,
+        condition_field, condition_op, condition_value,
+        posting_line, dest_bucket, priority, notes
+      )
+    )
   }
   
   # 10.1) Internal Routing
@@ -458,6 +537,7 @@ build_rules_tables <- function() {
     insert_routing(paste0(sc, "_R_I50"), sc, "INDIRECT_50_DELIVERY", "DEST_SUPPORT", 10, notes = "50% indirect to support")
     insert_routing(paste0(sc, "_R_I25T"), sc, "INDIRECT_25_TRUST", "DEST_TRUST_OH", 10)
     insert_routing(paste0(sc, "_R_I25P"), sc, "INDIRECT_25_PI", "DEST_PI_ORG", 10)
+    insert_routing(paste0(sc, "_R_MFF"), sc, "MFF_SPLIT_NEW_CC", "DEST_MFF_SPLIT", 10)
   }
   
   # 10.2) External Routing
@@ -468,6 +548,7 @@ build_rules_tables <- function() {
     insert_routing(paste0(sc, "_R_I50"), sc, "INDIRECT_50_DELIVERY", "DEST_PROVIDER", 10)
     insert_routing(paste0(sc, "_R_I25T"), sc, "INDIRECT_25_TRUST", "DEST_PROVIDER", 10)
     insert_routing(paste0(sc, "_R_I25P"), sc, "INDIRECT_25_PI", "DEST_PROVIDER", 10)
+    insert_routing(paste0(sc, "_R_MFF"), sc, "MFF_SPLIT_NEW_CC", "DEST_MFF_SPLIT", 10)
   }
   
 }
