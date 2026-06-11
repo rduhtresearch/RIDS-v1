@@ -784,8 +784,21 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
           type = "error",
           duration = 10
         )
-        return(adjusted)
+        w$hide()
+        return(NULL)
       })
+
+      req(adjusted)
+
+      cc_assignment_summary <- attr(adjusted, "cost_centre_assignment_summary")
+      log_step4_event(
+        level = "INFO",
+        message = "Cost centre assignment completed",
+        details = list(
+          matched_rows = cc_assignment_summary$matched_rows %||% NA_integer_,
+          unmatched_rows = cc_assignment_summary$unmatched_rows %||% NA_integer_
+        )
+      )
       
       adjusted <- tryCatch({
         assign_edge_keys(adjusted)

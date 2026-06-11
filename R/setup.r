@@ -590,7 +590,15 @@ settings_table <- function() {
       params = list("log_retention_days", "90")
     )
   }
-  
+
+  if (!"cost_centre_matrix_file" %in% existing_keys) {
+    dbExecute(
+      CON,
+      "INSERT INTO app_settings (key, value) VALUES (?, ?)",
+      params = list("cost_centre_matrix_file", "")
+    )
+  }
+
 }
 
 app_logs_table <- function() {
