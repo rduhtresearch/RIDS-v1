@@ -221,6 +221,40 @@ cc_load_active_matrix_rules <- function() {
   cc_prepare_matrix_rules(matrix_df)$rules
 }
 
+cc_build_unmatched_report <- function(resolved) {
+  report_columns <- intersect(
+    c(
+      "cpms_id",
+      "study_site",
+      "scenario_id",
+      "row_id",
+      "sheet_name",
+      "Study_Arm",
+      "Activity",
+      "Visit",
+      "Department_join",
+      "activity_type_join",
+      "Staff_Role_join",
+      "posting_line_type_join"
+    ),
+    names(resolved)
+  )
+
+  if (length(report_columns) == 0) {
+    return(tibble::tibble())
+  }
+
+  resolved %>%
+    filter(is.na(.data$cost_code)) %>%
+    select(all_of(report_columns)) %>%
+    rename(
+      Department = any_of("Department_join"),
+      activity_type = any_of("activity_type_join"),
+      Staff_Role = any_of("Staff_Role_join"),
+      posting_line_type_id = any_of("posting_line_type_join")
+    )
+}
+
 #' Attach cost_code (cost centre) to each posting line using the configured matrix.
 #'
 #' @param posting_output Posting lines dataframe, post `adjust_posting_lines()`
@@ -270,19 +304,18 @@ add_cost_centres <- function(posting_output, study_speciality) {
     ) %>%
     select(
       -all_of(c(
-        "Department_join",
-        "activity_type_join",
-        "Staff_Role_join",
-        "posting_line_type_join",
         "matrix_cost_code"
       ))
     )
+
+  unmatched_report <- cc_build_unmatched_report(resolved)
 
   attr(resolved, "cost_centre_assignment_summary") <- list(
     total_rows = nrow(resolved),
     matched_rows = sum(!is.na(resolved$cost_code)),
     unmatched_rows = sum(is.na(resolved$cost_code))
   )
+  attr(resolved, "cost_centre_unmatched_report") <- unmatched_report
 
   resolved
 }

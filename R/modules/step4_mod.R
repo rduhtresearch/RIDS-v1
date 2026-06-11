@@ -571,25 +571,8 @@ step4_UI <- function(id) {
       width       = 12,
       status      = "primary",
       solidHeader = FALSE,
-      footer = tagList(
-        downloadButton(ns("download_zip"), "Download ZIP", class = "btn-success"),
-        actionButton(ns("complete"), "Complete and return to library", class = "btn-primary")
-      ),
-      div(
-        style = "display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;",
-        selectInput(ns("arm_select"), label = "Study Arm", choices = NULL, width = "200px"),
-        uiOutput(ns("save_status"))
-      ),
-      reactableOutput(ns("preview_table")),
-      
-      hr(),
-      h4("Template builder (preview)"),
-      edgeBuilderUI(ns("edge_builder")),
-      
-      # ── ADDON ── custom activities panel ──────────────────────────────────
-      hr(),
-      customActivityUI(ns("custom_activities"))
-      # ──────────────────────────────────────────────────────────────────────
+      footer = uiOutput(ns("step4_footer")),
+      uiOutput(ns("step4_body"))
     ),
     shinyjs::hidden(
       div(
@@ -616,9 +599,9 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     
     templates <- reactiveVal(NULL)
     zip_path  <- reactiveVal(NULL)
-    
-    templates <- reactiveVal(NULL)
-    zip_path  <- reactiveVal(NULL)
+    unmatched_cost_centres <- reactiveVal(NULL)
+    validation_failed <- reactiveVal(FALSE)
+    rollback_failed_message <- reactiveVal(NULL)
     
     # ── Edge template builder module ─────────────────────────────────────────
     edited_templates <- edgeBuilderServer(
@@ -647,6 +630,27 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     
     prepare_for_export <- function(tpls) {
       Filter(function(d) !is.null(d) && nrow(d) > 0, tpls)
+    }
+
+    summarize_unmatched_cost_centres <- function(df) {
+      if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) {
+        return(tibble::tibble())
+      }
+
+      df %>%
+        count(
+          .data$Department,
+          .data$activity_type,
+          .data$Staff_Role,
+          .data$posting_line_type_id,
+          name = "occurrence_count"
+        ) %>%
+        arrange(
+          .data$Department,
+          .data$activity_type,
+          .data$Staff_Role,
+          .data$posting_line_type_id
+        )
     }
     
     # Department is internal-only — drives builder read-only logic.
@@ -718,6 +722,82 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         app_log_info("step4", message)
       }
     }
+
+    output$step4_footer <- renderUI({
+      if (isTRUE(validation_failed())) {
+        return(NULL)
+      }
+
+      tagList(
+        downloadButton(session$ns("download_zip"), "Download ZIP", class = "btn-success"),
+        actionButton(session$ns("complete"), "Complete and return to library", class = "btn-primary")
+      )
+    })
+
+    output$step4_body <- renderUI({
+      if (isTRUE(validation_failed())) {
+        return(tagList(
+          uiOutput(session$ns("cost_centre_validation_panel"))
+        ))
+      }
+
+      tagList(
+        div(
+          style = "display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;",
+          selectInput(session$ns("arm_select"), label = "Study Arm", choices = NULL, width = "200px"),
+          uiOutput(session$ns("save_status"))
+        ),
+        reactableOutput(session$ns("preview_table")),
+        hr(),
+        h4("Template builder (preview)"),
+        edgeBuilderUI(session$ns("edge_builder")),
+        hr(),
+        customActivityUI(session$ns("custom_activities"))
+      )
+    })
+
+    output$cost_centre_validation_panel <- renderUI({
+      unmatched <- unmatched_cost_centres()
+      if (is.null(unmatched) || !is.data.frame(unmatched) || nrow(unmatched) == 0) {
+        return(NULL)
+      }
+
+      rollback_message <- rollback_failed_message()
+
+      tagList(
+        div(
+          style = paste(
+            "margin-bottom: 1rem;",
+            "padding: 0.9rem 1rem;",
+            "border-radius: 6px;",
+            "background: #fff4f2;"
+          ),
+          div(
+            style = "font-weight: 600; color: #8e2f23; margin-bottom: 0.35rem;",
+            "Cost centre matrix validation failed"
+          ),
+          div(
+            style = "color: #8e2f23;",
+            "The study was not processed. Review the unmatched conditions below, download the report if needed, then start again from step 1."
+          ),
+          if (!is.null(rollback_message)) {
+            div(
+              style = "margin-top: 0.5rem; font-weight: 600; color: #8e2f23;",
+              rollback_message
+            )
+          },
+          div(
+            style = "margin-top: 0.75rem;",
+            downloadButton(
+              session$ns("download_unmatched_cost_centres"),
+              "Download unmatched conditions CSV",
+              class = "btn-outline-danger btn-sm"
+            )
+          )
+        ),
+        reactableOutput(session$ns("unmatched_cost_centres_table"))
+      )
+    })
     
     # ── Generate templates on load ────────────────────────────────────────────
     observe({
@@ -728,6 +808,12 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       # First entry: signal is 0; addon wipes; signal bumps to 1 → this observer
       # runs once more with customs cleared (no-op effectively).
       custom_activity_handles$invalidation_signal()
+      validation_failed(FALSE)
+      rollback_failed_message(NULL)
+      unmatched_cost_centres(NULL)
+      templates(NULL)
+      zip_path(NULL)
+      shared_state$edge_templates <- NULL
       
       w$show()
 
@@ -791,6 +877,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       req(adjusted)
 
       cc_assignment_summary <- attr(adjusted, "cost_centre_assignment_summary")
+      cc_unmatched_report <- attr(adjusted, "cost_centre_unmatched_report")
       log_step4_event(
         level = "INFO",
         message = "Cost centre assignment completed",
@@ -799,6 +886,78 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
           unmatched_rows = cc_assignment_summary$unmatched_rows %||% NA_integer_
         )
       )
+
+      if (!is.null(cc_unmatched_report) && nrow(cc_unmatched_report) > 0) {
+        unmatched_summary <- summarize_unmatched_cost_centres(cc_unmatched_report)
+        unmatched_cost_centres(cc_unmatched_report)
+        app_log_exception(
+          "step4",
+          "Cost centre matrix validation failed",
+          simpleError("Unmatched cost centre conditions detected"),
+          list(
+            cpms_id = shared_state$cpms_id,
+            study_site = shared_state$study_site,
+            scenario_id = shared_state$scenario_id,
+            unmatched_rows = nrow(cc_unmatched_report),
+            unmatched_conditions = nrow(unmatched_summary)
+          )
+        )
+
+        rollback_result <- tryCatch({
+          delete_study_run(
+            cpms_id = as.character(shared_state$cpms_id),
+            study_site = as.character(shared_state$study_site),
+            scenario_id = as.character(shared_state$scenario_id),
+            con = CON,
+            delete_files = TRUE
+          )
+        }, error = function(e) {
+          e
+        })
+
+        templates(NULL)
+        zip_path(NULL)
+        shared_state$edge_templates <- NULL
+        validation_failed(TRUE)
+
+        if (inherits(rollback_result, "error")) {
+          rollback_message <- paste(
+            "Cleanup also failed, so some study data may still exist.",
+            "Please contact an administrator."
+          )
+          rollback_failed_message(rollback_message)
+          app_log_exception(
+            "step4",
+            "Study rollback failed after cost centre validation failure",
+            rollback_result,
+            list(
+              cpms_id = shared_state$cpms_id,
+              study_site = shared_state$study_site,
+              scenario_id = shared_state$scenario_id,
+              unmatched_rows = nrow(cc_unmatched_report),
+              unmatched_conditions = nrow(unmatched_summary)
+            )
+          )
+          showNotification(
+            "Cost centre matrix validation failed and cleanup did not complete. Please contact an administrator.",
+            type = "error",
+            duration = 12
+          )
+        } else {
+          showNotification(
+            paste(
+              "Cost centre matrix validation failed.",
+              nrow(unmatched_summary),
+              "unsupported condition(s) were found. The study was deleted and must be started again."
+            ),
+            type = "error",
+            duration = 12
+          )
+        }
+
+        w$hide()
+        return(NULL)
+      }
       
       adjusted <- tryCatch({
         assign_edge_keys(adjusted)
@@ -1022,6 +1181,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     
     # ── Preview selected arm ──────────────────────────────────────────────────
     output$preview_table <- renderReactable({
+      req(!isTRUE(validation_failed()))
       req(input$arm_select)
       
       tpls <- edited_templates()
@@ -1044,9 +1204,32 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         defaultColDef = colDef(minWidth = 120)
       )
     })
+
+    output$unmatched_cost_centres_table <- renderReactable({
+      unmatched_summary <- summarize_unmatched_cost_centres(unmatched_cost_centres())
+      req(nrow(unmatched_summary) > 0)
+
+      reactable(
+        unmatched_summary,
+        striped = TRUE,
+        highlight = TRUE,
+        compact = TRUE,
+        rownames = FALSE,
+        defaultPageSize = 10,
+        pagination = TRUE,
+        columns = list(
+          Department = colDef(name = "Department"),
+          activity_type = colDef(name = "Activity Type"),
+          Staff_Role = colDef(name = "Staff Role"),
+          posting_line_type_id = colDef(name = "Split Type"),
+          occurrence_count = colDef(name = "Count")
+        )
+      )
+    })
     
     # ── Save status ───────────────────────────────────────────────────────────
     output$save_status <- renderUI({
+      req(!isTRUE(validation_failed()))
       req(zip_path())
       div(
         style = "display: flex; align-items: center; gap: 0.5rem;",
@@ -1083,9 +1266,29 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         }
       }
     )
+
+    output$download_unmatched_cost_centres <- downloadHandler(
+      filename = function() {
+        paste0(
+          shared_state$cpms_id,
+          "_",
+          shared_state$study_site,
+          "_",
+          shared_state$scenario_id,
+          "_unmatched_cost_centres.csv"
+        )
+      },
+      contentType = "text/csv",
+      content = function(file) {
+        unmatched <- unmatched_cost_centres()
+        req(is.data.frame(unmatched), nrow(unmatched) > 0)
+        write.csv(unmatched, file = file, row.names = FALSE, na = "")
+      }
+    )
     
     # ── Complete: success modal + navigate + reset ──────────────────────────
     observeEvent(input$complete, {
+      req(!isTRUE(validation_failed()))
       
       current_session <- session
       shinyjs::show("complete_overlay")
@@ -1114,7 +1317,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     
     # ── Disable Complete until templates exist ──────────────────────────────
     observe({
-      shinyjs::toggleState("complete", condition = !is.null(templates()))
+      shinyjs::toggleState("complete", condition = !isTRUE(validation_failed()) && !is.null(templates()))
     })
     
   })

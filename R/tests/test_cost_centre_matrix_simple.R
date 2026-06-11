@@ -92,12 +92,21 @@ run_cost_centre_matrix_simple_tests <- function() {
 
   resolved <- add_cost_centres(rows, "Cancer")
   summary <- attr(resolved, "cost_centre_assignment_summary")
+  unmatched_report <- attr(resolved, "cost_centre_unmatched_report")
 
   .ccm_expect("direct alias maps correctly", identical(resolved$cost_code[[1]], "50007"))
   .ccm_expect("speciality token resolves from step 1 speciality", identical(resolved$cost_code[[2]], "58109"))
   .ccm_expect("unmatched non-speciality rows remain NA", is.na(resolved$cost_code[[3]]))
   .ccm_expect("training fee rows are excluded from matching", is.na(resolved$cost_code[[4]]))
   .ccm_expect("summary tracks unmatched rows", identical(summary$unmatched_rows, 2L))
+  .ccm_expect("unmatched report includes unmatched rows", nrow(unmatched_report) == 2L)
+  .ccm_expect(
+    "unmatched report uses normalized join fields",
+    identical(
+      names(unmatched_report),
+      c("Department", "activity_type", "Staff_Role", "posting_line_type_id")
+    )
+  )
 
   missing_speciality_error <- tryCatch({
     add_cost_centres(rows[2, , drop = FALSE], "Unknown Speciality")
