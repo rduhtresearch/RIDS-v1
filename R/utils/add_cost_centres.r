@@ -6,6 +6,10 @@ suppressPackageStartupMessages({
   library(tidyr)
 })
 
+cc_normalize_text <- function(x) {
+  stringr::str_to_lower(stringr::str_squish(as.character(x)))
+}
+
 SPECIALITY_CC_LOOKUP <- tribble(
   ~speciality,                    ~speciality_cost_centre,
   "Cardiology",                   "52000",
@@ -22,11 +26,11 @@ SPECIALITY_CC_LOOKUP <- tribble(
   "Dermatology",                  "67302",
   "ED",                           "69101"
 ) %>%
-  mutate(speciality_clean = str_squish(speciality))
+  mutate(speciality_clean = cc_normalize_text(speciality))
 
 COST_CENTRE_MATRIX_REQUIRED_COLUMNS <- c("Department", "Activity Type", "Staff Role")
-COST_CENTRE_MATRIX_SPECIALITY_TOKEN <- "Speciality"
-COST_CENTRE_MATRIX_EXCLUDED_NOTES <- c("Training Fee", "Inflight Training Fee")
+COST_CENTRE_MATRIX_SPECIALITY_TOKEN <- cc_normalize_text("Speciality")
+COST_CENTRE_MATRIX_EXCLUDED_NOTES <- cc_normalize_text(c("Training Fee", "Inflight Training Fee"))
 COST_CENTRE_MATRIX_COLUMN_ALIASES <- c(
   "Activity.Type" = "Activity Type",
   "Staff.Role" = "Staff Role",
@@ -40,10 +44,6 @@ COST_CENTRE_MATRIX_COLUMN_ALIASES <- c(
   "TRD40" = "DIRECT_40_PI",
   "TRD60" = "DIRECT_60_TEAM"
 )
-
-cc_normalize_text <- function(x) {
-  stringr::str_squish(as.character(x))
-}
 
 cc_get_setting <- function(key, default = "") {
   value <- tryCatch({
@@ -62,6 +62,7 @@ cc_get_setting <- function(key, default = "") {
 
   as.character(value$value[[1]])
 }
+
 
 cc_resolve_speciality_cost_centre <- function(study_speciality) {
   target_speciality <- cc_normalize_text(study_speciality %||% "")

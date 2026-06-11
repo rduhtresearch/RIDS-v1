@@ -83,10 +83,10 @@ run_cost_centre_matrix_simple_tests <- function() {
   dbExecute(con, "INSERT INTO app_settings (key, value) VALUES ('cost_centre_matrix_file', ?)", params = list(matrix_path))
 
   rows <- tibble(
-    Department = c("Study Team", "Study Team", "Study Team", "Study Team"),
-    activity_type = c("Baseline", "Baseline", "Baseline", "Training"),
-    Staff_Role = c("Admin/Data Entry", "Medical Staff", "Medical Staff", "Medical Staff"),
-    posting_line_type_id = c("DIRECT", "INDIRECT_25_PI", "CAPACITY_RD", "DIRECT"),
+    Department = c("study team", "STUDY TEAM", "Study Team", "Study Team"),
+    activity_type = c("baseline", "BASELINE", "Baseline", "Training"),
+    Staff_Role = c("admin/data entry", "MEDICAL STAFF", "Medical Staff", "Medical Staff"),
+    posting_line_type_id = c("direct", "indirect_25_pi", "CAPACITY_RD", "DIRECT"),
     cost_code = NA_character_
   )
 
@@ -96,6 +96,10 @@ run_cost_centre_matrix_simple_tests <- function() {
 
   .ccm_expect("direct alias maps correctly", identical(resolved$cost_code[[1]], "50007"))
   .ccm_expect("speciality token resolves from step 1 speciality", identical(resolved$cost_code[[2]], "58109"))
+  .ccm_expect("case-insensitive department join works", identical(resolved$cost_code[[1]], "50007"))
+  .ccm_expect("case-insensitive activity type join works", identical(resolved$cost_code[[1]], "50007"))
+  .ccm_expect("case-insensitive staff role join works", identical(resolved$cost_code[[1]], "50007"))
+  .ccm_expect("case-insensitive split type join works", identical(resolved$cost_code[[1]], "50007"))
   .ccm_expect("unmatched non-speciality rows remain NA", is.na(resolved$cost_code[[3]]))
   .ccm_expect("training fee rows are excluded from matching", is.na(resolved$cost_code[[4]]))
   .ccm_expect("summary tracks unmatched rows", identical(summary$unmatched_rows, 2L))
