@@ -1,5 +1,6 @@
 loginUI <- function(id) {
   ns <- NS(id)
+  app_version_label <- get0("APP_VERSION_LABEL", ifnotfound = "v1.0.0")
 
   div(
     id = "login-overlay",
@@ -11,7 +12,14 @@ loginUI <- function(id) {
         class = "card login-card",
         div(
           class = "card-body",
-          h1(class = "login-title", "RIDS"),
+          h1(
+            class = "login-title",
+            "RIDS ",
+            span(
+              style = "font-size: 0.95rem; color: #697786; font-weight: 400;",
+              app_version_label
+            )
+          ),
 
           div(
             id = ns("login_view"),
