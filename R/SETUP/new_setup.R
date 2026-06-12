@@ -32,11 +32,27 @@ APP_LOG_DIR <- file.path(SHARED_DIR, "logs")
 
 APP_HOST <- "127.0.0.1"
 APP_PORT <- 3838L
+APP_STATUS <- "live"
 
 # Reserved for a future SQL Server migration.
 SQL_SERVER <- ""
 SQL_DATABASE <- ""
 SQL_DRIVER <- ""
+
+existing_credential_secret <- ""
+if (file.exists(file.path(SHARED_DIR, "deployment_config.R"))) {
+  existing_cfg_env <- new.env(parent = baseenv())
+  try(sys.source(file.path(SHARED_DIR, "deployment_config.R"), envir = existing_cfg_env), silent = TRUE)
+  if (exists("CREDENTIAL_SECRET", envir = existing_cfg_env, inherits = FALSE)) {
+    existing_credential_secret <- trimws(as.character(get("CREDENTIAL_SECRET", envir = existing_cfg_env)))
+  }
+}
+
+CREDENTIAL_SECRET <- if (nzchar(existing_credential_secret)) {
+  existing_credential_secret
+} else {
+  sodium::bin2hex(sodium::random(32))
+}
 
 # ------------------------------------------------------------------------------
 # 2. Validation helpers
@@ -109,6 +125,8 @@ config <- list(
   db_dir = normalizePath(DB_DIR, winslash = "/", mustWork = FALSE),
   ict_upload_dir = normalizePath(ICT_UPLOAD_DIR, winslash = "/", mustWork = FALSE),
   edge_output_dir = normalizePath(EDGE_OUTPUT_DIR, winslash = "/", mustWork = FALSE),
+  credential_secret = CREDENTIAL_SECRET,
+  app_status = APP_STATUS,
   app_log_dir = normalizePath(APP_LOG_DIR, winslash = "/", mustWork = FALSE),
   app_host = APP_HOST,
   app_port = as.integer(APP_PORT),

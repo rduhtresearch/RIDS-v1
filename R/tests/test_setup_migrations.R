@@ -158,6 +158,10 @@ run_setup_migration_tests <- function() {
       "audit rows survive additive migration",
       dbGetQuery(con, "SELECT COUNT(*) AS n FROM auth_audit_log")$n[[1]] == 1L
     )
+    .setup_expect(
+      "user_api_credentials table is created",
+      "user_api_credentials" %in% dbListTables(con)
+    )
   })
 
   .with_setup_db(function(con) {

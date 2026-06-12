@@ -65,6 +65,7 @@ sidebarServer <- function(id, auth_state, parent_session, current_step) {
               menuItem("Reporting",     tabName = "tab_reporting", icon = icon("chart-line")),
               menuItem("Study Library", tabName = "tab_library",   icon = icon("book-open")),
               menuItem("Settings",      tabName = "tab_settings",  icon = icon("cog")),
+              menuItem("Integrations",  tabName = "tab_integrations", icon = icon("plug")),
               menuItem("Support",       tabName = "tab_support",   icon = icon("life-ring")),
               if (isTRUE(is_admin(auth_state$role))) {
                 tagList(

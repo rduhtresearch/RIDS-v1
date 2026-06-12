@@ -180,6 +180,7 @@ user_tables <- function() {
     dbExecute(CON, "CREATE SEQUENCE IF NOT EXISTS user_id_seq;")
     dbExecute(CON, "CREATE SEQUENCE IF NOT EXISTS auth_session_id_seq;")
     dbExecute(CON, "CREATE SEQUENCE IF NOT EXISTS auth_audit_id_seq;")
+    dbExecute(CON, "CREATE SEQUENCE IF NOT EXISTS user_api_credential_id_seq;")
 
     dbExecute(CON, "
       CREATE TABLE IF NOT EXISTS users (
@@ -223,6 +224,50 @@ user_tables <- function() {
         session_id     INTEGER
       );
     ")
+
+    dbExecute(CON, "
+      CREATE TABLE IF NOT EXISTS user_api_credentials (
+        credential_id      INTEGER PRIMARY KEY DEFAULT nextval('user_api_credential_id_seq'),
+        user_id            INTEGER NOT NULL,
+        provider           TEXT NOT NULL,
+        secret_ciphertext  TEXT NOT NULL,
+        secret_nonce       TEXT NOT NULL,
+        created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+      );
+    ")
+
+    credential_expected_cols <- c(
+      "credential_id", "user_id", "provider", "secret_ciphertext",
+      "secret_nonce", "created_at", "updated_at"
+    )
+    credential_column_defs <- c(
+      credential_id = "INTEGER",
+      user_id = "INTEGER",
+      provider = "TEXT",
+      secret_ciphertext = "TEXT",
+      secret_nonce = "TEXT",
+      created_at = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+      updated_at = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+    )
+
+    credential_cols <- dbListFields(CON, "user_api_credentials")
+    missing_credential_cols <- setdiff(credential_expected_cols, credential_cols)
+    for (col in missing_credential_cols) {
+      dbExecute(
+        CON,
+        paste("ALTER TABLE user_api_credentials ADD COLUMN", col, credential_column_defs[[col]], ";")
+      )
+    }
+
+    dbExecute(
+      CON,
+      paste(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_user_api_credentials_user_provider",
+        "ON user_api_credentials (user_id, provider);"
+      )
+    )
 
     users_cols <- dbListFields(CON, "users")
     missing_users_cols <- setdiff(users_expected_cols, users_cols)

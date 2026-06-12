@@ -74,6 +74,8 @@ What it does:
 4. Writes a `backup_manifest.txt` file with the source DB and exported tables
 5. Deletes older backup runs so only the newest 2 successful backups remain
 
+Keep `shared/deployment_config.R` safe alongside the deployment. It contains the stable `CREDENTIAL_SECRET` used to decrypt saved user API keys after a DB restore.
+
 If possible, ask users to close RIDS before running the backup.
 
 ## Manual Restore
@@ -98,6 +100,7 @@ What it does:
 5. Writes a `restore_manifest.txt` file in the safety folder
 
 After restore, reopen RIDS and verify the data you expected to recover.
+If the restored deployment keeps the same `shared/deployment_config.R`, saved user API keys will continue to work.
 
 ### 3. Prepare the Windows laptop for first use
 

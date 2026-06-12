@@ -20,6 +20,7 @@ library(zip)
 source("R/utils/deployment_config.R")
 source("R/utils/auth.r")
 source("R/utils/logging.R")
+source("R/utils/user_credentials.R")
 source("R/utils/db_error_handling.R")
 source("R/utils/add_study_arm.r")
 source("R/utils/pipeline_fixed.r")
@@ -58,6 +59,8 @@ EDGE_OUTPUT_DIR <- APP_CONFIG$edge_output_dir
 APP_HOST <- APP_CONFIG$app_host
 APP_PORT <- APP_CONFIG$app_port
 APP_RUN_LOG_DIR <- APP_CONFIG$app_log_dir
+CREDENTIAL_SECRET <- APP_CONFIG$credential_secret
+APP_STATUS <- APP_CONFIG$app_status
 APP_RUN_LOG_FILE <- initialize_app_run_logging(APP_RUN_LOG_DIR)
 
 app_log_info("startup", "Global initialization started")
