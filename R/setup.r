@@ -52,7 +52,6 @@ ict_table <- function() {
 ## App data --------------------------------------------------------------------
 meta_table <- function() {
   queries <- c(
-    "DROP TABLE IF EXISTS ict_uploads;",
     "CREATE SEQUENCE IF NOT EXISTS upload_id_seq;",
     "CREATE TABLE IF NOT EXISTS meta_data (
       id                INTEGER PRIMARY KEY DEFAULT nextval('upload_id_seq'),
@@ -139,32 +138,43 @@ meta_table <- function() {
 user_tables <- function() {
   tryCatch({
     existing_tables <- tryCatch(dbListTables(CON), error = function(e) character())
-    recreate_auth_tables <- FALSE
 
-    if ("users" %in% existing_tables) {
-      existing_cols <- dbListFields(CON, "users")
-      expected_cols <- c(
-        "user_id", "name", "username", "email", "password_hash", "role",
-        "active", "force_password_change", "created_at", "updated_at", "last_login_at"
-      )
-
-      if (!setequal(existing_cols, expected_cols)) {
-        recreate_auth_tables <- TRUE
-      }
-    }
+    users_expected_cols <- c(
+      "user_id", "name", "username", "email", "password_hash", "role",
+      "active", "force_password_change", "created_at", "updated_at", "last_login_at"
+    )
+    users_column_defs <- c(
+      user_id = "INTEGER",
+      name = "TEXT",
+      username = "TEXT",
+      email = "TEXT",
+      password_hash = "TEXT",
+      role = "TEXT DEFAULT 'user'",
+      active = "BOOLEAN DEFAULT TRUE",
+      force_password_change = "BOOLEAN DEFAULT FALSE",
+      created_at = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+      updated_at = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+      last_login_at = "TIMESTAMP"
+    )
 
     if ("tokens" %in% existing_tables) {
-      recreate_auth_tables <- TRUE
+      stop(
+        "Legacy auth table 'tokens' was found. Startup will not modify auth tables automatically. ",
+        "Take a database backup and run a manual auth migration before launching RIDS."
+      )
     }
 
-    if (recreate_auth_tables) {
-      dbExecute(CON, "DROP TABLE IF EXISTS auth_audit_log;")
-      dbExecute(CON, "DROP TABLE IF EXISTS auth_sessions;")
-      dbExecute(CON, "DROP TABLE IF EXISTS tokens;")
-      dbExecute(CON, "DROP TABLE IF EXISTS users;")
-      dbExecute(CON, "DROP SEQUENCE IF EXISTS auth_audit_id_seq;")
-      dbExecute(CON, "DROP SEQUENCE IF EXISTS auth_session_id_seq;")
-      dbExecute(CON, "DROP SEQUENCE IF EXISTS user_id_seq;")
+    if ("users" %in% existing_tables) {
+      existing_users_cols <- dbListFields(CON, "users")
+      extra_users_cols <- setdiff(existing_users_cols, users_expected_cols)
+      if (length(extra_users_cols) > 0) {
+        stop(
+          "The users table has unsupported columns: ",
+          paste(extra_users_cols, collapse = ", "),
+          ". Startup will not modify auth tables automatically. ",
+          "Take a database backup and run a manual auth migration before launching RIDS."
+        )
+      }
     }
 
     dbExecute(CON, "CREATE SEQUENCE IF NOT EXISTS user_id_seq;")
@@ -213,6 +223,15 @@ user_tables <- function() {
         session_id     INTEGER
       );
     ")
+
+    users_cols <- dbListFields(CON, "users")
+    missing_users_cols <- setdiff(users_expected_cols, users_cols)
+    for (col in missing_users_cols) {
+      dbExecute(
+        CON,
+        paste("ALTER TABLE users ADD COLUMN", col, users_column_defs[[col]], ";")
+      )
+    }
   }, error = function(e) {
     stop("Failed to initialise user tables: ", e$message)
   })

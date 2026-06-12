@@ -85,6 +85,9 @@ source(file.path(repo_dir, "R/addons/custom_activities/apply_custom_activities.R
 run_bootstrap_check()
 run_working_tree_release_check()
 
+source(file.path(repo_dir, "R/tests/test_setup_migrations.R"), local = FALSE)
+run_test_result("test_setup_migrations.R", run_setup_migration_tests)
+
 source(file.path(repo_dir, "R/tests/test_ca_build_custom_rows.R"), local = FALSE)
 run_test_result("test_ca_build_custom_rows.R", run_ca_tests)
 
