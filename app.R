@@ -75,22 +75,13 @@ ui <- tagList(
 )
 
 server <- function(input, output, session) {
-  shutdown_requested <- FALSE
-
-  request_app_shutdown <- function(reason) {
-    if (isTRUE(shutdown_requested)) {
-      return(invisible(FALSE))
-    }
-
-    shutdown_requested <<- TRUE
-    app_log_info("shutdown", paste("Stopping RIDS app:", reason))
-    stopApp()
-    invisible(TRUE)
+  activate_dashboard_tab <- function() {
+    updateTabItems(session, "sidebar", selected = "tab_dashboard")
+    shinyjs::runjs('$("[data-value=\'tab_dashboard\']").tab("show")')
   }
-
-  session$userData$request_app_shutdown <- request_app_shutdown
+  
   session$onSessionEnded(function() {
-    request_app_shutdown("browser session ended")
+    app_log_info("session", "Browser session ended")
   })
   
   output$user_badge <- renderUI({
@@ -128,7 +119,7 @@ server <- function(input, output, session) {
 
   observe({
     if (!isTRUE(is_admin(auth_state$role)) && identical(input$sidebar, "tab_admin")) {
-      updateTabItems(session, "sidebar", selected = "tab_dashboard")
+      activate_dashboard_tab()
     }
   })
 
@@ -149,11 +140,11 @@ server <- function(input, output, session) {
 
     if (isTRUE(auth_state$logged_in) && !isTRUE(auth_state$must_change_password)) {
       shinyjs::hide("login-overlay")
-      updateTabItems(session, "sidebar", selected = "tab_dashboard")
+      activate_dashboard_tab()
     } else {
       shinyjs::show("login-overlay")
       if (!isTRUE(auth_state$logged_in)) {
-        updateTabItems(session, "sidebar", selected = "tab_dashboard")
+        activate_dashboard_tab()
       }
     }
   })

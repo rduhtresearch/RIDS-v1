@@ -2,7 +2,53 @@ appUI <- function(id) {
   tagList(
     progressUI(NS(id, "progress")),
     tabItems(
-      tabItem("tab_dashboard", ""),
+      tagAppendAttributes(
+        tabItem(
+          "tab_dashboard",
+          div(
+            style = paste(
+              "min-height: calc(100vh - 12rem);",
+              "display: flex;",
+              "align-items: center;",
+              "justify-content: center;",
+              "padding: 2rem 1rem;"
+            ),
+            div(
+              style = paste(
+                "width: 100%;",
+                "max-width: 52rem;"
+              ),
+              bs4Card(
+                width = 12,
+                status = "primary",
+                solidHeader = FALSE,
+                collapsible = FALSE,
+                title = "Welcome to RIDS",
+                div(
+                  style = "padding: 0.5rem 0.25rem 0.25rem;",
+                  p(
+                    style = "margin-bottom: 0.75rem; color: #1d2a36; font-size: 1.05rem; font-weight: 600;",
+                    "Research Income Distribution System"
+                  ),
+                  p(
+                    style = "margin-bottom: 0.75rem; color: #697786;",
+                    "Developed by the Research & Development Department at Royal Devon University Healthcare NHS Foundation Trust."
+                  ),
+                  p(
+                    style = "margin-bottom: 0.75rem; color: #697786;",
+                    "RIDS helps transform iCT costings into EDGE-ready financial templates, supporting efficient income distribution, and research finance management."
+                  ),
+                  p(
+                    style = "margin-bottom: 0; color: #697786; font-weight: 600;",
+                    "Use the sidebar to get started."
+                  )
+                )
+              )
+            )
+          )
+        ),
+        class = "active"
+      ),
       tabItem("tab_reporting", reportingUI(NS(id, "reporting"))),
       tabItem("tab_settings",  settingsUI(NS(id, "settings"))),
       tabItem("tab_library",   libraryUI(NS(id, "library"))),

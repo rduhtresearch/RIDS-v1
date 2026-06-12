@@ -148,6 +148,16 @@ body:not(.app-shell) .page-shell {
   transition: background-color 0.18s ease, box-shadow 0.18s ease;
 }
 
+.login-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  color: var(--login-ink-soft);
+  font-family: var(--login-font);
+  font-size: 0.86rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
 #login-overlay {
   position: fixed;
   top: 0; left: 0;
@@ -162,6 +172,13 @@ body:not(.app-shell) .page-shell {
   background: var(--login-accent-dark) !important;
   box-shadow: 0 10px 20px rgba(24, 76, 111, 0.14);
   transform: none;
+}
+
+.login-link:hover,
+.login-link:focus,
+.login-link:active {
+  color: var(--login-ink);
+  text-decoration: underline;
 }
 
 .login-note {

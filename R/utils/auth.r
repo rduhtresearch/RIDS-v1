@@ -608,6 +608,53 @@ reset_user_password <- function(user_id, temporary_password, actor_user_id = NUL
   list(success = TRUE, temporary_password = temporary_password, user = get_user_by_id(user_id))
 }
 
+reset_user_password_by_username <- function(username, new_password) {
+  user_row <- get_user_by_username(username)
+  if (is.null(user_row)) {
+    return(list(success = FALSE, message = "User not found."))
+  }
+
+  row <- user_row[1, , drop = FALSE]
+
+  if (!isTRUE(row$active[[1]])) {
+    return(list(success = FALSE, message = "User is inactive."))
+  }
+
+  password_hash <- hash_password(new_password)
+  if (is.null(password_hash)) {
+    return(list(success = FALSE, message = "Failed to reset password."))
+  }
+
+  dbExecute(
+    CON,
+    paste(
+      "UPDATE users SET password_hash = ?, force_password_change = FALSE,",
+      "updated_at = CURRENT_TIMESTAMP WHERE user_id = ?"
+    ),
+    params = list(password_hash, row$user_id[[1]])
+  )
+
+  dbExecute(
+    CON,
+    paste(
+      "UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP",
+      "WHERE user_id = ? AND revoked_at IS NULL"
+    ),
+    params = list(row$user_id[[1]])
+  )
+
+  log_auth_event(
+    event_type = "self_service_password_reset_insecure",
+    user_id = row$user_id[[1]],
+    actor_user_id = row$user_id[[1]],
+    username = row$username[[1]],
+    success = TRUE,
+    message = "Username-only password reset completed"
+  )
+
+  list(success = TRUE, user = get_user_by_id(row$user_id[[1]]))
+}
+
 change_user_password <- function(user_id,
                                  current_password,
                                  new_password,
