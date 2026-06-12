@@ -1,4 +1,6 @@
 appUI <- function(id) {
+  app_version_label <- get0("APP_VERSION_LABEL", ifnotfound = "v1.0.0")
+
   tagList(
     progressUI(NS(id, "progress")),
     tabItems(
@@ -23,7 +25,13 @@ appUI <- function(id) {
                 status = "primary",
                 solidHeader = FALSE,
                 collapsible = FALSE,
-                title = "Welcome to RIDS",
+                title = tagList(
+                  "Welcome to RIDS ",
+                  span(
+                    style = "font-size: 0.85rem; color: #697786; font-weight: 400;",
+                    app_version_label
+                  )
+                ),
                 div(
                   style = "padding: 0.5rem 0.25rem 0.25rem;",
                   p(

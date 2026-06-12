@@ -93,7 +93,9 @@ onStop(function() {
 # ==============================================================================
 # Version consts
 # ==============================================================================
-APP_VERSION <- trimws(Sys.getenv("RIDS_APP_VERSION", "0.4.0"))
+APP_VERSION <- trimws(Sys.getenv("RIDS_APP_VERSION", "v1.0.0"))
+APP_VERSION_LABEL <- if (grepl("^[vV]", APP_VERSION)) APP_VERSION else paste0("v", APP_VERSION)
+APP_TITLE <- paste("RIDS", APP_VERSION_LABEL)
 APP_LAST_UPDATED <- trimws(Sys.getenv("RIDS_APP_LAST_UPDATED", "2026-05-06"))
 AUTH_SESSION_HOURS <- suppressWarnings(as.numeric(Sys.getenv("RIDS_AUTH_SESSION_HOURS", "10")))
 if (is.na(AUTH_SESSION_HOURS) || AUTH_SESSION_HOURS <= 0) {

@@ -20,6 +20,7 @@ source("R/modules/custom_activity_module.R",  local = FALSE)
 
 ui <- tagList(
   tags$head(
+    tags$title(APP_TITLE),
     tags$link(
       rel = "stylesheet",
       type = "text/css",
@@ -35,7 +36,7 @@ ui <- tagList(
       "RIDS ",
       span(
         style = "font-size: 0.7rem; color: #697786; font-weight: 400;",
-        "VERSION TEST (hello world)"
+        APP_VERSION_LABEL
       )
     )), rightUi = uiOutput("user_badge")),
     sidebar = dashboardSidebar(
@@ -68,7 +69,7 @@ ui <- tagList(
           "border-radius: 12px;",
           "z-index: 1040;"
         ),
-        paste0("v", APP_VERSION, " · last updated ", APP_LAST_UPDATED)
+        paste0(APP_VERSION_LABEL, " · last updated ", APP_LAST_UPDATED)
       )
     ) 
   )

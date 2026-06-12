@@ -119,7 +119,7 @@ export_working_tree_snapshot <- function(repo_dir, target_dir, overwrite = FALSE
 }
 
 default_bootstrap_release_version <- function() {
-  paste0("local-", format(Sys.Date(), "%Y.%m.%d"))
+  "v1.0.0"
 }
 
 read_release_pointer <- function(path, default = "") {
