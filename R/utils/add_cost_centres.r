@@ -1,36 +1,14 @@
 suppressPackageStartupMessages({
+  library(DBI)
   library(dplyr)
-  library(tibble)
   library(stringr)
+  library(tibble)
+  library(tidyr)
 })
 
-# ── Lookup tables ─────────────────────────────────────────────────────────────
-
-DEPARTMENT_CC_LOOKUP <- tribble(
-  ~Department,                      ~department_cost_centre,
-  "CRDT Research nurse",            "50007",
-  "CRF",                            "50112",
-  "Cardiovascular",                 "03634",
-  "Cherry Brook",                   "04134",
-  "Clinical Chemistry",             "05644",
-  "CFR",                            "50112",
-  "Dietician",                      "23834",
-  "Gastroenterology",               "15039",
-  "Haematology",                    "06244",
-  "Imaging Centre",                 "61105",
-  "Microbiology",                   "06044",
-  "Genetics",                       "02334",
-  "Nuclear Medicine",               "04735",
-  "Opthalmology",                   "13355",
-  "Pathology",                      "05944",
-  "Radiology",                      "06734",
-  "Respritory",                     "22864",
-  "Immunology Or Virology",         "06044",
-  "Radiotherapy",                   "04734",
-  "Inverventional Radiology",       "06739",
-  "Dental Radiology",               "38495"
-) %>%
-  mutate(Department_clean = str_squish(Department))
+cc_normalize_text <- function(x) {
+  stringr::str_to_lower(stringr::str_squish(as.character(x)))
+}
 
 SPECIALITY_CC_LOOKUP <- tribble(
   ~speciality,                    ~speciality_cost_centre,
@@ -48,61 +26,297 @@ SPECIALITY_CC_LOOKUP <- tribble(
   "Dermatology",                  "67302",
   "ED",                           "69101"
 ) %>%
-  mutate(speciality_clean = str_squish(speciality))
+  mutate(speciality_clean = cc_normalize_text(speciality))
 
-# ── Public function ───────────────────────────────────────────────────────────
+COST_CENTRE_MATRIX_REQUIRED_COLUMNS <- c("Department", "Activity Type", "Staff Role")
+COST_CENTRE_MATRIX_SPECIALITY_TOKEN <- cc_normalize_text("Speciality")
+COST_CENTRE_MATRIX_EXCLUDED_NOTES <- cc_normalize_text(c("Training Fee", "Inflight Training Fee"))
+COST_CENTRE_MATRIX_COLUMN_ALIASES <- c(
+  "Activity.Type" = "Activity Type",
+  "Staff.Role" = "Staff Role",
+  "DIRECT_COST" = "DIRECT",
+  "INDIRECT_25 [O/Hs]" = "INDIRECT_25_TRUST",
+  "INDIRECT_25.[O/Hs]" = "INDIRECT_25_TRUST",
+  "INDIRECT_25 [PI CB]" = "INDIRECT_25_PI",
+  "INDIRECT_25.[PI.CB]" = "INDIRECT_25_PI",
+  "INDIRECT_50" = "INDIRECT_50_DELIVERY",
+  "RD_CAPACITY" = "CAPACITY_RD",
+  "TRD40" = "DIRECT_40_PI",
+  "TRD60" = "DIRECT_60_TEAM"
+)
 
-#' Attach cost_code (cost centre) to each posting line.
+cc_get_setting <- function(key, default = "") {
+  value <- tryCatch({
+    DBI::dbGetQuery(
+      CON,
+      "SELECT value FROM app_settings WHERE key = ? LIMIT 1",
+      params = list(key)
+    )
+  }, error = function(e) {
+    data.frame(value = character(), stringsAsFactors = FALSE)
+  })
+
+  if (nrow(value) == 0 || is.na(value$value[[1]]) || !nzchar(trimws(value$value[[1]]))) {
+    return(default)
+  }
+
+  as.character(value$value[[1]])
+}
+
+
+cc_resolve_speciality_cost_centre <- function(study_speciality) {
+  target_speciality <- cc_normalize_text(study_speciality %||% "")
+
+  if (!nzchar(target_speciality)) {
+    stop("No speciality was supplied for cost centre resolution.")
+  }
+
+  matches <- SPECIALITY_CC_LOOKUP %>%
+    filter(.data$speciality_clean == .env$target_speciality) %>%
+    pull(.data$speciality_cost_centre)
+
+  if (length(matches) == 0) {
+    stop("No speciality cost centre mapping found for '", target_speciality, "'.")
+  }
+
+  matches[[1]]
+}
+
+cc_allowed_posting_line_types <- function() {
+  DBI::dbGetQuery(
+    CON,
+    "SELECT posting_line_type_id FROM posting_line_types ORDER BY posting_line_type_id"
+  )$posting_line_type_id
+}
+
+cc_apply_column_aliases <- function(df) {
+  alias_hits <- intersect(names(COST_CENTRE_MATRIX_COLUMN_ALIASES), names(df))
+  if (length(alias_hits) == 0) {
+    return(df)
+  }
+
+  rename_targets <- stats::setNames(
+    alias_hits,
+    unname(COST_CENTRE_MATRIX_COLUMN_ALIASES[alias_hits])
+  )
+
+  dplyr::rename(df, !!!rename_targets)
+}
+
+cc_prepare_matrix_rules <- function(df, allowed_posting_line_types = NULL) {
+  allowed_posting_line_types <- allowed_posting_line_types %||% cc_allowed_posting_line_types()
+  df <- cc_apply_column_aliases(df)
+
+  missing_required <- setdiff(COST_CENTRE_MATRIX_REQUIRED_COLUMNS, names(df))
+  if (length(missing_required) > 0) {
+    stop(
+      "Cost centre matrix missing required columns: ",
+      paste(missing_required, collapse = ", ")
+    )
+  }
+
+  split_cols <- intersect(names(df), allowed_posting_line_types)
+  if (length(split_cols) == 0) {
+    stop("Cost centre matrix must contain at least one recognised split column.")
+  }
+
+  prepared <- df %>%
+    mutate(across(all_of(split_cols), as.character)) %>%
+    mutate(
+      Department = cc_normalize_text(.data$Department),
+      `Activity Type` = cc_normalize_text(.data$`Activity Type`),
+      `Staff Role` = cc_normalize_text(.data$`Staff Role`),
+      Notes = if ("Notes" %in% names(.)) cc_normalize_text(.data$Notes) else NA_character_
+    ) %>%
+    pivot_longer(
+      cols = all_of(split_cols),
+      names_to = "posting_line_type_id",
+      values_to = "matrix_cost_code"
+    ) %>%
+    mutate(
+      posting_line_type_id = cc_normalize_text(.data$posting_line_type_id),
+      matrix_cost_code = cc_normalize_text(.data$matrix_cost_code)
+    ) %>%
+    filter(!is.na(.data$matrix_cost_code), .data$matrix_cost_code != "") %>%
+    distinct(
+      .data$Department,
+      .data$`Activity Type`,
+      .data$`Staff Role`,
+      .data$posting_line_type_id,
+      .data$matrix_cost_code,
+      .keep_all = TRUE
+    )
+
+  duplicate_rows <- prepared %>%
+    count(
+      .data$Department,
+      .data$`Activity Type`,
+      .data$`Staff Role`,
+      .data$posting_line_type_id,
+      name = "duplicate_count"
+    ) %>%
+    filter(.data$duplicate_count > 1)
+
+  if (nrow(duplicate_rows) > 0) {
+    stop("Duplicate matrix keys detected after pivoting.")
+  }
+
+  list(
+    rules = prepared,
+    split_columns = split_cols
+  )
+}
+
+validate_cost_centre_matrix_file <- function(file_path, allowed_posting_line_types = NULL) {
+  tryCatch({
+    if (is.na(file_path) || !nzchar(file_path) || !file.exists(file_path)) {
+      stop("Cost centre matrix CSV not found.")
+    }
+
+    matrix_df <- tibble::as_tibble(
+      read.csv(file_path, check.names = FALSE, stringsAsFactors = FALSE)
+    )
+    prepared <- cc_prepare_matrix_rules(
+      matrix_df,
+      allowed_posting_line_types = allowed_posting_line_types
+    )
+
+    list(
+      valid = TRUE,
+      message = sprintf(
+        "Valid matrix: %s split columns detected.",
+        length(prepared$split_columns)
+      ),
+      split_columns = prepared$split_columns
+    )
+  }, error = function(e) {
+    list(
+      valid = FALSE,
+      message = conditionMessage(e),
+      split_columns = character()
+    )
+  })
+}
+
+cc_get_active_matrix_config <- function() {
+  file_path <- cc_get_setting("cost_centre_matrix_file", "")
+
+  if (!nzchar(file_path)) {
+    stop("No cost centre matrix has been configured.")
+  }
+
+  list(file_path = file_path)
+}
+
+cc_load_active_matrix_rules <- function() {
+  config <- cc_get_active_matrix_config()
+  validation <- validate_cost_centre_matrix_file(config$file_path)
+
+  if (!isTRUE(validation$valid)) {
+    stop(validation$message)
+  }
+
+  matrix_df <- tibble::as_tibble(
+    read.csv(config$file_path, check.names = FALSE, stringsAsFactors = FALSE)
+  )
+  cc_prepare_matrix_rules(matrix_df)$rules
+}
+
+cc_build_unmatched_report <- function(resolved) {
+  report_columns <- intersect(
+    c(
+      "cpms_id",
+      "study_site",
+      "scenario_id",
+      "row_id",
+      "sheet_name",
+      "Study_Arm",
+      "Activity",
+      "Visit",
+      "Department_join",
+      "activity_type_join",
+      "Staff_Role_join",
+      "posting_line_type_join"
+    ),
+    names(resolved)
+  )
+
+  if (length(report_columns) == 0) {
+    return(tibble::tibble())
+  }
+
+  resolved %>%
+    filter(is.na(.data$cost_code)) %>%
+    select(all_of(report_columns)) %>%
+    rename(
+      Department = any_of("Department_join"),
+      activity_type = any_of("activity_type_join"),
+      Staff_Role = any_of("Staff_Role_join"),
+      posting_line_type_id = any_of("posting_line_type_join")
+    )
+}
+
+#' Attach cost_code (cost centre) to each posting line using the configured matrix.
 #'
-#' Writes the resolved cost centre to the existing `cost_code` column on
-#' posting_lines, using a row's posting_line_type_id, Staff_Role, and
-#' Department to choose the lookup.
-#'
-#' @param posting_output  Posting lines dataframe, post `adjust_posting_lines()`
-#'                        and post `rename(Staff_Role = Staff.Role)`.
-#' @param study_speciality  The speciality NAME (string) for this study.
-#'                          Pass `shared_state$speciality_name`.
-#' @return  Same dataframe with `cost_code` populated. Working columns dropped.
+#' @param posting_output Posting lines dataframe, post `adjust_posting_lines()`
+#'   and post `rename(Staff_Role = Staff.Role)`.
+#' @param study_speciality The speciality name selected in step 1.
+#' @return Same dataframe with `cost_code` populated and a summary attribute.
 add_cost_centres <- function(posting_output, study_speciality) {
-  
-  required <- c("Department", "Staff_Role", "posting_line_type_id")
-  missing  <- setdiff(required, names(posting_output))
+  required <- c("Department", "Staff_Role", "posting_line_type_id", "activity_type")
+  missing <- setdiff(required, names(posting_output))
   if (length(missing) > 0) {
     stop("add_cost_centres(): missing columns: ", paste(missing, collapse = ", "))
   }
-  
-  posting_output %>%
+
+  rules <- cc_load_active_matrix_rules()
+  speciality_cost_centre <- cc_resolve_speciality_cost_centre(study_speciality)
+
+  resolved <- posting_output %>%
     mutate(
-      Department_clean = str_squish(Department),
-      Staff_Role_clean = str_squish(Staff_Role),
-      speciality_clean = str_squish(study_speciality)
+      Department_join = cc_normalize_text(.data$Department),
+      activity_type_join = cc_normalize_text(.data$activity_type),
+      Staff_Role_join = cc_normalize_text(.data$Staff_Role),
+      posting_line_type_join = cc_normalize_text(.data$posting_line_type_id)
     ) %>%
     left_join(
-      DEPARTMENT_CC_LOOKUP %>% select(Department_clean, department_cost_centre),
-      by = "Department_clean"
-    ) %>%
-    left_join(
-      SPECIALITY_CC_LOOKUP %>% select(speciality_clean, speciality_cost_centre),
-      by = "speciality_clean"
+      rules %>%
+        filter(is.na(.data$Notes) | !.data$Notes %in% COST_CENTRE_MATRIX_EXCLUDED_NOTES) %>%
+        select(
+          "Department",
+          "Activity Type",
+          "Staff Role",
+          "posting_line_type_id",
+          "matrix_cost_code"
+        ),
+      by = c(
+        "Department_join" = "Department",
+        "activity_type_join" = "Activity Type",
+        "Staff_Role_join" = "Staff Role",
+        "posting_line_type_join" = "posting_line_type_id"
+      )
     ) %>%
     mutate(
       cost_code = case_when(
-        posting_line_type_id == "CAPACITY_RD"          ~ "50000",
-        posting_line_type_id == "INDIRECT_25_TRUST"    ~ "50000",
-        posting_line_type_id == "INDIRECT_50_DELIVERY" ~ "50007",
-        
-        posting_line_type_id == "DIRECT" &
-          Staff_Role_clean %in% c("Admin/Data Entry", "Nursing/Manager") &
-          Department_clean == "Study Team"             ~ "50007",
-        
-        posting_line_type_id == "DIRECT" &
-          Staff_Role_clean == "Medical Staff"          ~ department_cost_centre,
-        
-        posting_line_type_id == "INDIRECT_25_PI"       ~ speciality_cost_centre,
-        
+        .data$matrix_cost_code == COST_CENTRE_MATRIX_SPECIALITY_TOKEN ~ speciality_cost_centre,
+        !is.na(.data$matrix_cost_code) ~ .data$matrix_cost_code,
         TRUE ~ NA_character_
       )
     ) %>%
-    select(-Department_clean, -Staff_Role_clean, -speciality_clean,
-           -department_cost_centre, -speciality_cost_centre)
+    select(
+      -all_of(c(
+        "matrix_cost_code"
+      ))
+    )
+
+  unmatched_report <- cc_build_unmatched_report(resolved)
+
+  attr(resolved, "cost_centre_assignment_summary") <- list(
+    total_rows = nrow(resolved),
+    matched_rows = sum(!is.na(resolved$cost_code)),
+    unmatched_rows = sum(is.na(resolved$cost_code))
+  )
+  attr(resolved, "cost_centre_unmatched_report") <- unmatched_report
+
+  resolved
 }

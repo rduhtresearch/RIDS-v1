@@ -108,6 +108,12 @@ run_test_result("test_step2_filters.R", run_step2_filter_tests)
 source(file.path(repo_dir, "R/tests/test_contract_cost_source_of_truth.R"), local = FALSE)
 run_test_result("test_contract_cost_source_of_truth.R", run_contract_cost_source_of_truth_tests)
 
+source(file.path(repo_dir, "R/tests/test_study_deletion.R"), local = FALSE)
+run_test_result("test_study_deletion.R", run_study_deletion_tests)
+
+source(file.path(repo_dir, "R/tests/test_cost_centre_matrix_simple.R"), local = FALSE)
+run_test_result("test_cost_centre_matrix_simple.R", run_cost_centre_matrix_simple_tests)
+
 source(file.path(repo_dir, "R/tests/test_release_workflow.R"), local = FALSE)
 run_test_result("test_release_workflow.R", run_release_workflow_tests)
 
