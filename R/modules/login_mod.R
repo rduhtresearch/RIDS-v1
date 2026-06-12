@@ -20,7 +20,8 @@ loginUI <- function(id) {
               textInput(ns("username"), "Username"),
               passwordInput(ns("password"), "Password")
             ),
-            actionButton(ns("login"), "Sign in", class = "btn-primary login-button")
+            actionButton(ns("login"), "Sign in", class = "btn-primary login-button"),
+            actionLink(ns("forgot_password"), "Forgot password?", class = "login-link")
           ),
 
           shinyjs::hidden(
@@ -54,6 +55,24 @@ loginUI <- function(id) {
               p(
                 class = "login-note",
                 "Your password must be changed before continuing."
+              )
+            )
+          ),
+
+          shinyjs::hidden(
+            div(
+              id = ns("password_reset_view"),
+              div(
+                class = "login-form",
+                textInput(ns("reset_username"), "Username"),
+                passwordInput(ns("reset_new_password"), "New password"),
+                passwordInput(ns("reset_confirm_password"), "Confirm new password")
+              ),
+              actionButton(ns("reset_password"), "Reset password", class = "btn-primary login-button"),
+              actionLink(ns("back_to_login"), "Back to sign in", class = "login-link"),
+              p(
+                class = "login-note",
+                "Temporary local-only reset for the current deployment."
               )
             )
           ),
@@ -108,6 +127,7 @@ loginServer <- function(id) {
       shinyjs::hide("login_view")
       shinyjs::hide("bootstrap_view")
       shinyjs::hide("password_change_view")
+      shinyjs::hide("password_reset_view")
       shinyjs::show(view_id)
     }
 
@@ -122,6 +142,9 @@ loginServer <- function(id) {
       updateTextInput(session, "current_password", value = "")
       updateTextInput(session, "new_password", value = "")
       updateTextInput(session, "confirm_password", value = "")
+      updateTextInput(session, "reset_username", value = "")
+      updateTextInput(session, "reset_new_password", value = "")
+      updateTextInput(session, "reset_confirm_password", value = "")
     }
 
     clear_auth_state <- function(reset_app_state = TRUE) {
@@ -312,6 +335,17 @@ loginServer <- function(id) {
       auth_state$auth_ready <- TRUE
     })
 
+    observeEvent(input$forgot_password, {
+      req(!isTRUE(bootstrap_needed()))
+      clear_password_fields()
+      show_view("password_reset_view")
+    })
+
+    observeEvent(input$back_to_login, {
+      clear_password_fields()
+      show_view("login_view")
+    })
+
     observeEvent(input$change_password, {
       if (nchar(input$new_password) < 8) {
         feedbackDanger("new_password", show = TRUE, text = "Minimum 8 characters")
@@ -338,6 +372,49 @@ loginServer <- function(id) {
       clear_password_fields()
       auth_state$auth_ready <- TRUE
       showNotification("Password updated.", type = "message", duration = 5)
+    })
+
+    observeEvent(input$reset_password, {
+      req(!isTRUE(bootstrap_needed()))
+
+      if (trimws(input$reset_username) == "") {
+        feedbackDanger("reset_username", show = TRUE, text = "Required")
+        return()
+      }
+
+      if (nchar(input$reset_new_password) < 8) {
+        feedbackDanger("reset_new_password", show = TRUE, text = "Minimum 8 characters")
+        return()
+      }
+
+      if (!identical(input$reset_new_password, input$reset_confirm_password)) {
+        feedbackDanger("reset_confirm_password", show = TRUE, text = "Passwords do not match")
+        return()
+      }
+
+      result <- tryCatch({
+        reset_user_password_by_username(
+          username = input$reset_username,
+          new_password = input$reset_new_password
+        )
+      }, error = function(e) {
+        app_log_exception("auth", "Username-only password reset failed", e, list(username = trimws(input$reset_username)))
+        NULL
+      })
+
+      if (is.null(result) || !isTRUE(result$success)) {
+        feedbackDanger(
+          "reset_username",
+          show = TRUE,
+          text = result$message %||% "Password reset failed."
+        )
+        showNotification(result$message %||% "Password reset failed.", type = "warning", duration = 5)
+        return()
+      }
+
+      clear_password_fields()
+      show_view("login_view")
+      showNotification("Password reset. Sign in with your new password.", type = "message", duration = 5)
     })
 
     observe({

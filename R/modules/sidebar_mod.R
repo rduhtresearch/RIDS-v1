@@ -72,13 +72,29 @@ sidebarServer <- function(id, auth_state, parent_session, current_step) {
                   menuItem("Admin", tabName = "tab_admin", icon = icon("users-cog"))
                 )
               },
-              tags$div(
-                style = "display:none",
+              tagAppendAttributes(
+                menuItem("Home", tabName = "tab_dashboard", icon = icon("home"), selected = TRUE),
+                style = "display:none;"
+              ),
+              tagAppendAttributes(
                 menuItem("Study Workspace", tabName = "tab_study", icon = icon("folder-open")),
-                menuItem("ICT",        tabName = "tab_step1", icon = icon("file")),
+                style = "display:none;"
+              ),
+              tagAppendAttributes(
+                menuItem("ICT", tabName = "tab_step1", icon = icon("file")),
+                style = "display:none;"
+              ),
+              tagAppendAttributes(
                 menuItem("ICT Step 2", tabName = "tab_step2", icon = icon("file")),
+                style = "display:none;"
+              ),
+              tagAppendAttributes(
                 menuItem("ICT Step 3", tabName = "tab_step3", icon = icon("file")),
-                menuItem("ICT Step 4", tabName = "tab_step4", icon = icon("file"))
+                style = "display:none;"
+              ),
+              tagAppendAttributes(
+                menuItem("ICT Step 4", tabName = "tab_step4", icon = icon("file")),
+                style = "display:none;"
               )
             )
           ),
@@ -101,12 +117,6 @@ sidebarServer <- function(id, auth_state, parent_session, current_step) {
         auth_state$logout()
       } else {
         auth_state$logged_in <- FALSE
-      }
-
-      if (is.function(parent_session$userData$request_app_shutdown)) {
-        parent_session$onFlushed(function() {
-          parent_session$userData$request_app_shutdown("user logged out")
-        }, once = TRUE)
       }
     })
 

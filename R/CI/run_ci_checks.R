@@ -114,6 +114,9 @@ run_test_result("test_study_deletion.R", run_study_deletion_tests)
 source(file.path(repo_dir, "R/tests/test_cost_centre_matrix_simple.R"), local = FALSE)
 run_test_result("test_cost_centre_matrix_simple.R", run_cost_centre_matrix_simple_tests)
 
+source(file.path(repo_dir, "R/tests/test_auth_password_reset.R"), local = FALSE)
+run_test_result("test_auth_password_reset.R", run_auth_password_reset_tests)
+
 source(file.path(repo_dir, "R/tests/test_release_workflow.R"), local = FALSE)
 run_test_result("test_release_workflow.R", run_release_workflow_tests)
 
