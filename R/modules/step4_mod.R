@@ -1,3 +1,11 @@
+step4_templates_for_export <- function(edited_templates, original_templates) {
+  if (!is.null(edited_templates) && length(edited_templates) > 0) {
+    return(edited_templates)
+  }
+
+  original_templates
+}
+
 # step4_UI <- function(id) {
 #   ns <- NS(id)
 #   tagList(
@@ -1248,10 +1256,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       },
       contentType = "application/zip",
       content = function(file) {
-        tpls <- edited_templates()
-        if (is.null(tpls) || length(tpls) == 0) {
-          tpls <- templates()
-        }
+        tpls <- step4_templates_for_export(edited_templates(), templates())
         
         req(tpls)
         
@@ -1289,10 +1294,57 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     # ── Complete: success modal + navigate + reset ──────────────────────────
     observeEvent(input$complete, {
       req(!isTRUE(validation_failed()))
-      
-      current_session <- session
+
+      final_templates <- step4_templates_for_export(edited_templates(), templates())
+      req(final_templates)
+
+      current_zip_path <- zip_path()
+      req(current_zip_path)
+
       shinyjs::show("complete_overlay")
-      
+
+      zip_saved_ok <- tryCatch({
+        write_zip(final_templates, current_zip_path)
+        log_step4_event(
+          level = "INFO",
+          message = "Final amended ZIP save completed",
+          details = list(
+            template_count = length(final_templates),
+            zip_path = current_zip_path
+          )
+        )
+        TRUE
+      }, error = function(e) {
+        if (handle_fatal_db_error(session, e, "step4", list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          template_count = length(final_templates),
+          stage = "final_zip_persist"
+        ))) {
+          shinyjs::hide("complete_overlay")
+          return(FALSE)
+        }
+
+        app_log_exception("step4", "Final amended ZIP save failed", e, list(
+          cpms_id = shared_state$cpms_id,
+          upload_id = shared_state$upload_id,
+          template_count = length(final_templates),
+          zip_path = current_zip_path
+        ))
+        showNotification(
+          "Failed to save the amended EDGE templates. Please try again before returning to the library.",
+          type = "error",
+          duration = 10
+        )
+        shinyjs::hide("complete_overlay")
+        FALSE
+      })
+
+      if (!isTRUE(zip_saved_ok)) {
+        return()
+      }
+
+      current_session <- session
       later::later(function() {
         shiny::withReactiveDomain(current_session, {
           shinyjs::hide("complete_overlay")

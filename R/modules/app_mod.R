@@ -22,7 +22,7 @@ appUI <- function(id) {
               ),
               bs4Card(
                 width = 12,
-                status = "primary",
+                status = "white",
                 solidHeader = FALSE,
                 collapsible = FALSE,
                 title = tagList(
@@ -44,7 +44,7 @@ appUI <- function(id) {
                   ),
                   p(
                     style = "margin-bottom: 0.75rem; color: #697786;",
-                    "RIDS helps transform iCT costings into EDGE-ready financial templates, supporting efficient income distribution, and research finance management."
+                    "A rules-driven commercial research finance platform that applies AcoRD-based distribution logic to iCT costings, transforming them into consistent income distribution outputs, automated reporting, and EDGE-ready templates, with configurable rules to reflect local R&D finance policy and operational requirements."
                   ),
                   p(
                     style = "margin-bottom: 0; color: #697786; font-weight: 600;",
@@ -59,6 +59,7 @@ appUI <- function(id) {
       ),
       tabItem("tab_reporting", reportingUI(NS(id, "reporting"))),
       tabItem("tab_settings",  settingsUI(NS(id, "settings"))),
+      tabItem("tab_integrations", integrationsUI(NS(id, "integrations"))),
       tabItem("tab_library",   libraryUI(NS(id, "library"))),
       tabItem("tab_study",     studyWorkspaceUI(NS(id, "study_workspace"))),
       tabItem("tab_support",   supportUI(NS(id, "support"))),
@@ -128,6 +129,7 @@ appServer <- function(id, auth_state, current_step) {
     progressServer("progress", current_step)
     reportingServer("reporting", auth_state)
     settingsServer("settings", auth_state)
+    integrationsServer("integrations", auth_state)
     libraryServer("library", auth_state, shared_state)
     supportServer("support", auth_state)
     studyWorkspaceServer("study_workspace", shared_state)

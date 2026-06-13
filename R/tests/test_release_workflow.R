@@ -49,6 +49,7 @@ run_release_workflow_tests <- function() {
     db_dir = normalizePath(file.path(shared_dir, "data", "RIDS.duckdb"), winslash = "/", mustWork = FALSE),
     ict_upload_dir = normalizePath(file.path(shared_dir, "uploads"), winslash = "/", mustWork = FALSE),
     edge_output_dir = normalizePath(file.path(shared_dir, "outputs"), winslash = "/", mustWork = FALSE),
+    credential_secret = paste(rep("release-workflow-secret", 2), collapse = "-"),
     app_log_dir = normalizePath(file.path(shared_dir, "logs"), winslash = "/", mustWork = FALSE),
     app_host = "127.0.0.1",
     app_port = 3838L,

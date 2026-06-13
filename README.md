@@ -43,6 +43,7 @@ Important points:
 - `shared/` contains runtime state only.
 - `current_release.txt` tells the launcher which version is live.
 - `deploy_log.tsv` records publish and rollback activity.
+- `shared/deployment_config.R` now also contains the stable `CREDENTIAL_SECRET` used to decrypt saved user API keys after backup and restore.
 
 ## First-Time Setup
 
@@ -74,6 +75,7 @@ What setup does:
 5. Creates the shared DuckDB database if needed.
 6. Bootstraps the first live release automatically.
 7. Creates that first live release from the current working tree so the launcher works immediately.
+8. Generates or preserves the stable `CREDENTIAL_SECRET` used for encrypted user API keys.
 
 ## Development and Release Flow
 
@@ -133,6 +135,7 @@ source("R/SETUP/manual_restore.R")
 ```
 
 After restore, reopen RIDS and check the key data you expected to recover.
+Saved user API keys continue to work after restore as long as the restored installation still uses the same `shared/deployment_config.R` secret.
 
 ### Run local checks
 

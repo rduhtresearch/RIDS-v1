@@ -25,6 +25,7 @@ run_bootstrap_check <- function() {
     db_dir = normalizePath(file.path(temp_root, "data", "RIDS.duckdb"), winslash = "/", mustWork = FALSE),
     ict_upload_dir = normalizePath(file.path(temp_root, "uploads"), winslash = "/", mustWork = FALSE),
     edge_output_dir = normalizePath(file.path(temp_root, "outputs"), winslash = "/", mustWork = FALSE),
+    credential_secret = paste(rep("ci-bootstrap-secret", 2), collapse = "-"),
     app_log_dir = normalizePath(file.path(temp_root, "logs"), winslash = "/", mustWork = FALSE),
     app_host = "127.0.0.1",
     app_port = 3838L,
@@ -56,6 +57,7 @@ run_working_tree_release_check <- function() {
     db_dir = normalizePath(file.path(temp_root, "shared", "data", "RIDS.duckdb"), winslash = "/", mustWork = FALSE),
     ict_upload_dir = normalizePath(file.path(temp_root, "shared", "uploads"), winslash = "/", mustWork = FALSE),
     edge_output_dir = normalizePath(file.path(temp_root, "shared", "outputs"), winslash = "/", mustWork = FALSE),
+    credential_secret = paste(rep("ci-release-secret", 2), collapse = "-"),
     app_log_dir = normalizePath(file.path(temp_root, "shared", "logs"), winslash = "/", mustWork = FALSE),
     app_host = "127.0.0.1",
     app_port = 3838L,
@@ -108,6 +110,10 @@ source(file.path(repo_dir, "R/modules/step2_mod.R"), local = FALSE)
 source(file.path(repo_dir, "R/tests/test_step2_filters.R"), local = FALSE)
 run_test_result("test_step2_filters.R", run_step2_filter_tests)
 
+source(file.path(repo_dir, "R/modules/step4_mod.R"), local = FALSE)
+source(file.path(repo_dir, "R/tests/test_step4_persistence.R"), local = FALSE)
+run_test_result("test_step4_persistence.R", run_step4_persistence_tests)
+
 source(file.path(repo_dir, "R/tests/test_contract_cost_source_of_truth.R"), local = FALSE)
 run_test_result("test_contract_cost_source_of_truth.R", run_contract_cost_source_of_truth_tests)
 
@@ -119,6 +125,9 @@ run_test_result("test_cost_centre_matrix_simple.R", run_cost_centre_matrix_simpl
 
 source(file.path(repo_dir, "R/tests/test_auth_password_reset.R"), local = FALSE)
 run_test_result("test_auth_password_reset.R", run_auth_password_reset_tests)
+
+source(file.path(repo_dir, "R/tests/test_user_api_credentials.R"), local = FALSE)
+run_test_result("test_user_api_credentials.R", run_user_api_credential_tests)
 
 source(file.path(repo_dir, "R/tests/test_release_workflow.R"), local = FALSE)
 run_test_result("test_release_workflow.R", run_release_workflow_tests)

@@ -68,6 +68,8 @@ read_runtime_config <- function(path) {
     db_dir = as.character(get_value("DB_DIR", "")),
     ict_upload_dir = as.character(get_value("ICT_UPLOAD_DIR", "")),
     edge_output_dir = as.character(get_value("EDGE_OUTPUT_DIR", "")),
+    credential_secret = as.character(get_value("CREDENTIAL_SECRET", "")),
+    app_status = as.character(get_value("APP_STATUS", "live")),
     app_log_dir = as.character(get_value("APP_LOG_DIR", file.path(getwd(), "logs"))),
     app_host = as.character(get_value("APP_HOST", "127.0.0.1")),
     app_port = suppressWarnings(as.integer(get_value("APP_PORT", 3838L))),
@@ -87,6 +89,20 @@ read_runtime_config <- function(path) {
 
   if (!nzchar(cfg$edge_output_dir)) {
     stop("The deployment config is missing EDGE_OUTPUT_DIR: ", path)
+  }
+
+  cfg$credential_secret <- trimws(cfg$credential_secret)
+  if (!nzchar(cfg$credential_secret)) {
+    stop("The deployment config is missing CREDENTIAL_SECRET: ", path)
+  }
+
+  if (nchar(cfg$credential_secret) < 16) {
+    stop("The deployment config CREDENTIAL_SECRET must be at least 16 characters: ", path)
+  }
+
+  cfg$app_status <- tolower(trimws(cfg$app_status))
+  if (!cfg$app_status %in% c("dev", "test", "live")) {
+    cfg$app_status <- "live"
   }
 
   if (!nzchar(cfg$app_log_dir)) {
@@ -178,6 +194,8 @@ write_deployment_config <- function(path, config) {
     paste0('DB_DIR         <- "', encode_path(config$db_dir), '"'),
     paste0('ICT_UPLOAD_DIR <- "', encode_path(config$ict_upload_dir), '"'),
     paste0('EDGE_OUTPUT_DIR <- "', encode_path(config$edge_output_dir), '"'),
+    paste0('CREDENTIAL_SECRET <- "', encode_r_string(config$credential_secret), '"'),
+    paste0('APP_STATUS     <- "', encode_r_string(config$app_status %||% "live"), '"'),
     paste0('APP_LOG_DIR    <- "', encode_path(config$app_log_dir), '"'),
     paste0('APP_HOST       <- "', encode_r_string(config$app_host), '"'),
     paste0("APP_PORT       <- ", as.integer(config$app_port)),
