@@ -141,6 +141,25 @@ run_user_api_credential_tests <- function() {
     .credential_expect("deleted credential is no longer configured", !isTRUE(after_delete$configured))
   })
 
+  .with_credential_db(function(con, db_path) {
+    save_user_api_credential(2L, "edge", "bob-key")
+    result <- update_user_account(
+      user_id = 2L,
+      name = "Bob Updated",
+      username = "bob",
+      email = "bob@example.com",
+      role = "user",
+      active = TRUE,
+      actor_user_id = 1L
+    )
+
+    .credential_expect("user can still be updated with saved credential", isTRUE(result$success))
+    .credential_expect(
+      "saved credential still decrypts after user update",
+      identical(get_user_api_credential(2L, "edge"), "bob-key")
+    )
+  })
+
   temp_root <- tempfile("rids_missing_secret_")
   dir.create(temp_root, recursive = TRUE, showWarnings = FALSE)
   on.exit(unlink(temp_root, recursive = TRUE, force = TRUE), add = TRUE)

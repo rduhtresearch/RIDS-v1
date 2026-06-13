@@ -233,8 +233,7 @@ user_tables <- function() {
         secret_ciphertext  TEXT NOT NULL,
         secret_nonce       TEXT NOT NULL,
         created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(user_id)
+        updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     ")
 
@@ -259,6 +258,44 @@ user_tables <- function() {
         CON,
         paste("ALTER TABLE user_api_credentials ADD COLUMN", col, credential_column_defs[[col]], ";")
       )
+    }
+
+    recreate_credentials_without_fk <- FALSE
+    credentials_create_sql <- tryCatch(
+      DBI::dbGetQuery(
+        CON,
+        "SELECT sql FROM duckdb_tables() WHERE table_name = 'user_api_credentials' LIMIT 1"
+      )$sql[[1]],
+      error = function(e) NA_character_
+    )
+
+    if (!is.na(credentials_create_sql) &&
+        grepl("FOREIGN KEY", credentials_create_sql, fixed = TRUE)) {
+      recreate_credentials_without_fk <- TRUE
+    }
+
+    if (isTRUE(recreate_credentials_without_fk)) {
+      dbExecute(CON, "DROP TABLE IF EXISTS user_api_credentials__migrate;")
+      dbExecute(CON, "
+        CREATE TABLE user_api_credentials__migrate (
+          credential_id      INTEGER PRIMARY KEY,
+          user_id            INTEGER NOT NULL,
+          provider           TEXT NOT NULL,
+          secret_ciphertext  TEXT NOT NULL,
+          secret_nonce       TEXT NOT NULL,
+          created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      ")
+      dbExecute(CON, "
+        INSERT INTO user_api_credentials__migrate
+          (credential_id, user_id, provider, secret_ciphertext, secret_nonce, created_at, updated_at)
+        SELECT
+          credential_id, user_id, provider, secret_ciphertext, secret_nonce, created_at, updated_at
+        FROM user_api_credentials;
+      ")
+      dbExecute(CON, "DROP TABLE user_api_credentials;")
+      dbExecute(CON, "ALTER TABLE user_api_credentials__migrate RENAME TO user_api_credentials;")
     }
 
     dbExecute(
