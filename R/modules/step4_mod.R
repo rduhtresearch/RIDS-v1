@@ -1055,14 +1055,16 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       req(adjusted)
       
       persisted_ok <- tryCatch({
-        dbExecute(CON,
-                  paste(
-                    "DELETE FROM posting_lines",
-                    "WHERE cpms_id = ? AND study_site = ? AND scenario_id = ?"
-                  ),
-                  params = study_identity_params()
-        )
-        dbAppendTable(CON, "posting_lines", adjusted)
+        DBI::dbWithTransaction(CON, {
+          dbExecute(CON,
+                    paste(
+                      "DELETE FROM posting_lines",
+                      "WHERE cpms_id = ? AND study_site = ? AND scenario_id = ?"
+                    ),
+                    params = study_identity_params()
+          )
+          dbAppendTable(CON, "posting_lines", adjusted)
+        })
         log_step4_event(
           level = "INFO",
           message = "Posting lines saved",
