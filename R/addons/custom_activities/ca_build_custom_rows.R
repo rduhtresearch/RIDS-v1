@@ -38,6 +38,16 @@ suppressPackageStartupMessages({
   baseline  = "CUSTOM_BASELINE"
 )
 .CA_DEST_BUCKET <- "CUSTOM"
+.CA_POSTING_LINE_TYPES <- list(
+  single_cc = "DIRECT",
+  baseline = c(
+    "DIRECT",
+    "CAPACITY_RD",
+    "INDIRECT_50_DELIVERY",
+    "INDIRECT_25_TRUST",
+    "INDIRECT_25_PI"
+  )
+)
 
 # ── Validation ───────────────────────────────────────────────────────────────
 
@@ -85,6 +95,15 @@ suppressPackageStartupMessages({
   invisible(TRUE)
 }
 
+.ca_posting_line_types <- function(mode, n) {
+  posting_line_types <- .CA_POSTING_LINE_TYPES[[mode]]
+  if (is.null(posting_line_types) || length(posting_line_types) != n) {
+    stop("ca_build_custom_rows(): posting line type mapping is invalid for mode '", mode, "'.")
+  }
+
+  posting_line_types
+}
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 #' Build posting-line rows for a single custom activity.
@@ -116,6 +135,7 @@ ca_build_custom_rows <- function(rows, mode, context) {
   
   row_id_base <- context$row_id_base %||% .CA_ROW_ID_BASE
   n           <- nrow(rows)
+  posting_line_types <- .ca_posting_line_types(mode, n)
   
   tibble(
     # ── Identity & run context ──────────────────────────────────────────────
@@ -132,9 +152,7 @@ ca_build_custom_rows <- function(rows, mode, context) {
     calc_tag             = NA_character_,
     row_category         = .CA_ROW_CATEGORY[[mode]],
     is_medic             = NA,                          # logical NA
-    posting_line_type_id = paste0(
-      "CUSTOM_", toupper(mode), "_", seq_len(n)
-    ),
+    posting_line_type_id = posting_line_types,
     destination_bucket   = .CA_DEST_BUCKET,
     destination_entity   = as.character(rows$cost_centre),
     cost_code            = NA_character_,
