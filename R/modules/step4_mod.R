@@ -608,8 +608,10 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     templates <- reactiveVal(NULL)
     zip_path  <- reactiveVal(NULL)
     unmatched_cost_centres <- reactiveVal(NULL)
+    unmatched_cost_centres_summary <- reactiveVal(tibble::tibble())
     validation_failed <- reactiveVal(FALSE)
     rollback_failed_message <- reactiveVal(NULL)
+    validation_failure_latched <- reactiveVal(FALSE)
     
     # ── Edge template builder module ─────────────────────────────────────────
     edited_templates <- edgeBuilderServer(
@@ -638,6 +640,31 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     
     prepare_for_export <- function(tpls) {
       Filter(function(d) !is.null(d) && nrow(d) > 0, tpls)
+    }
+
+    clear_cost_centre_failure <- function() {
+      unmatched_cost_centres(NULL)
+      unmatched_cost_centres_summary(tibble::tibble())
+      validation_failed(FALSE)
+      rollback_failed_message(NULL)
+      validation_failure_latched(FALSE)
+    }
+
+    set_cost_centre_failure <- function(unmatched_report, rollback_message = NULL) {
+      unmatched_cost_centres(unmatched_report)
+      unmatched_cost_centres_summary(summarize_unmatched_cost_centres(unmatched_report))
+      validation_failed(TRUE)
+      rollback_failed_message(rollback_message)
+      validation_failure_latched(TRUE)
+    }
+
+    build_cost_centre_error_report <- function(message_text) {
+      tibble::tibble(
+        Department = "Configuration error",
+        activity_type = trimws(as.character(message_text %||% "Unknown cost centre error")),
+        Staff_Role = NA_character_,
+        posting_line_type_id = NA_character_
+      )
     }
 
     summarize_unmatched_cost_centres <- function(df) {
@@ -766,7 +793,10 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
 
     output$cost_centre_validation_panel <- renderUI({
       unmatched <- unmatched_cost_centres()
-      if (is.null(unmatched) || !is.data.frame(unmatched) || nrow(unmatched) == 0) {
+      unmatched_summary <- unmatched_cost_centres_summary()
+
+      if (!isTRUE(validation_failed()) &&
+          (is.null(unmatched) || !is.data.frame(unmatched) || nrow(unmatched) == 0)) {
         return(NULL)
       }
 
@@ -796,16 +826,26 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
           },
           div(
             style = "margin-top: 0.75rem;",
-            downloadButton(
-              session$ns("download_unmatched_cost_centres"),
-              "Download unmatched conditions CSV",
-              class = "btn-outline-danger btn-sm"
-            )
+            if (is.data.frame(unmatched) && nrow(unmatched) > 0) {
+              downloadButton(
+                session$ns("download_unmatched_cost_centres"),
+                "Download unmatched conditions CSV",
+                class = "btn-outline-danger btn-sm"
+              )
+            }
           )
         ),
-        reactableOutput(session$ns("unmatched_cost_centres_table"))
+        if (is.data.frame(unmatched_summary) && nrow(unmatched_summary) > 0) {
+          reactableOutput(session$ns("unmatched_cost_centres_table"))
+        }
       )
     })
+
+    observeEvent(shared_state$current_step, {
+      if (!identical(shared_state$current_step, "step4")) {
+        clear_cost_centre_failure()
+      }
+    }, ignoreInit = TRUE)
     
     # ── Generate templates on load ────────────────────────────────────────────
     observe({
@@ -816,9 +856,11 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       # First entry: signal is 0; addon wipes; signal bumps to 1 → this observer
       # runs once more with customs cleared (no-op effectively).
       custom_activity_handles$invalidation_signal()
-      validation_failed(FALSE)
-      rollback_failed_message(NULL)
-      unmatched_cost_centres(NULL)
+      if (isTRUE(validation_failure_latched())) {
+        return(invisible(NULL))
+      }
+
+      clear_cost_centre_failure()
       templates(NULL)
       zip_path(NULL)
       shared_state$edge_templates <- NULL
@@ -869,15 +911,21 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       adjusted <- tryCatch({
         add_cost_centres(adjusted, isolate(shared_state$speciality_name))
       }, error = function(e) {
+        error_message <- conditionMessage(e)
+        set_cost_centre_failure(
+          build_cost_centre_error_report(error_message),
+          rollback_message = paste(
+            "Cost centre assignment could not run.",
+            "Review the report below, then start again from step 1."
+          )
+        )
+        templates(NULL)
+        zip_path(NULL)
+        shared_state$edge_templates <- NULL
         app_log_exception("step4", "Cost centre assignment failed", e, list(
           cpms_id = shared_state$cpms_id,
           speciality = isolate(shared_state$speciality_name)
         ))
-        showNotification(
-          paste("Failed to assign cost centres:", conditionMessage(e)),
-          type = "error",
-          duration = 10
-        )
         w$hide()
         return(NULL)
       })
@@ -897,7 +945,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
 
       if (!is.null(cc_unmatched_report) && nrow(cc_unmatched_report) > 0) {
         unmatched_summary <- summarize_unmatched_cost_centres(cc_unmatched_report)
-        unmatched_cost_centres(cc_unmatched_report)
+        set_cost_centre_failure(cc_unmatched_report)
         app_log_exception(
           "step4",
           "Cost centre matrix validation failed",
@@ -926,14 +974,13 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         templates(NULL)
         zip_path(NULL)
         shared_state$edge_templates <- NULL
-        validation_failed(TRUE)
 
         if (inherits(rollback_result, "error")) {
           rollback_message <- paste(
             "Cleanup also failed, so some study data may still exist.",
             "Please contact an administrator."
           )
-          rollback_failed_message(rollback_message)
+          set_cost_centre_failure(cc_unmatched_report, rollback_message)
           app_log_exception(
             "step4",
             "Study rollback failed after cost centre validation failure",
@@ -1214,7 +1261,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     })
 
     output$unmatched_cost_centres_table <- renderReactable({
-      unmatched_summary <- summarize_unmatched_cost_centres(unmatched_cost_centres())
+      unmatched_summary <- unmatched_cost_centres_summary()
       req(nrow(unmatched_summary) > 0)
 
       reactable(
@@ -1286,6 +1333,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       contentType = "text/csv",
       content = function(file) {
         unmatched <- unmatched_cost_centres()
+        req(isTRUE(validation_failed()))
         req(is.data.frame(unmatched), nrow(unmatched) > 0)
         write.csv(unmatched, file = file, row.names = FALSE, na = "")
       }
