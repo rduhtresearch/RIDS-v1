@@ -94,7 +94,7 @@ run_ca_tests <- function() {
   .expect("is_medic is NA (logical)",           is.na(out$is_medic[1]) && is.logical(out$is_medic))
   .expect("row_id is integer",                  is.integer(out$row_id))
   .expect("row_id starts at 9000000",           out$row_id[1] == 9000000L)
-  .expect("posting_line_type_id correct",       out$posting_line_type_id[1] == "CUSTOM_SINGLE_CC_1")
+  .expect("posting_line_type_id correct",       out$posting_line_type_id[1] == "DIRECT")
   
   # ── Baseline mode ──────────────────────────────────────────────────────────
   cat("\n[ baseline mode ]\n")
@@ -108,7 +108,17 @@ run_ca_tests <- function() {
   .expect("all rows = CUSTOM_BASELINE",         all(out2$row_category == "CUSTOM_BASELINE"))
   .expect("row_ids are sequential",             all(diff(out2$row_id) == 1L))
   .expect("posting_line_type_ids distinct",     length(unique(out2$posting_line_type_id)) == 5L)
-  .expect("posting_line_type_ids prefixed",     all(grepl("^CUSTOM_BASELINE_", out2$posting_line_type_id)))
+  .expect("posting_line_type_ids match split order",
+          identical(
+            out2$posting_line_type_id,
+            c(
+              "DIRECT",
+              "CAPACITY_RD",
+              "INDIRECT_50_DELIVERY",
+              "INDIRECT_25_TRUST",
+              "INDIRECT_25_PI"
+            )
+          ))
   .expect("cost centres match input",           all(out2$destination_entity == baseline_rows$cost_centre))
   .expect("all sheet_name = Custom Activities", all(out2$sheet_name == "Custom Activities"))
   .expect("all Study_Arm = Treatment",          all(out2$Study_Arm == "Treatment"))
