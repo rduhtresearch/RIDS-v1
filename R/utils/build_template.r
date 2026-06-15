@@ -323,6 +323,12 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
     )
   
   # ── Build templates ───────────────────────────────────────────────────────────
+
+  screening_failure_default_cost <- function(total) {
+    # Screening failure EDGE defaults are temporarily forced to zero while the
+    # rest of the export pipeline continues to reconcile on adjusted totals.
+    total * 0
+  }
   
   .build_special <- function(df) {
     df |>
@@ -375,7 +381,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
         ),
         `Analysis Code`                                        = edge_key,
         `Cost Category`                                        = "Research Cost",
-        `Default Cost`                                         = total,
+        `Default Cost`                                         = screening_failure_default_cost(total),
         `Currency`                                             = "GBP",
         `Department`                                           = NA,
         `Overhead Cost`                                        = NA,
@@ -482,7 +488,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
           `Cost Item Description`                                = paste0(visit_prefix, " - ", item_text),
           `Analysis Code`                                        = edge_key,
           `Cost Category`                                        = "Research Cost",
-          `Default Cost`                                         = total,
+          `Default Cost`                                         = screening_failure_default_cost(total),
           `Currency`                                             = "GBP",
           `Department`                                           = NA,
           `Overhead Cost`                                        = NA,

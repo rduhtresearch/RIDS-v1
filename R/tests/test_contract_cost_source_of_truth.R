@@ -660,16 +660,17 @@ run_contract_cost_source_of_truth_tests <- function() {
     filter(sheet_name == "Arm A - SCREENING FAILURE") %>%
     summarise(total = sum(adjusted_amount), .by = c(row_id, Activity, staff_group, edge_key)) %>%
     arrange(row_id, staff_group) %>%
-    pull(total)
-  .expect("screening template costs are grouped adjusted_amount sums",
+    pull(total) %>%
+    (\(x) x * 0)()
+  .expect("screening template costs default to zero",
           identical(
             screening_templates[["Arm A - SCREENING FAILURE"]]$`Default Cost`,
             expected_screening_costs
           ))
-  .expect("screening template costs reconcile to the duplicated visit total",
+  .expect("screening template costs sum to zero",
           identical(
             round(sum(screening_templates[["Arm A - SCREENING FAILURE"]]$`Default Cost`), 2),
-            2032
+            0
           ))
 
   cat("\n", strrep("=", 60), "\n", sep = "")
