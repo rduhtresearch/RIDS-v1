@@ -241,28 +241,30 @@ persist_ict_to_duckdb <- function(db_path, ict_cost_table) {
     "Activity_Name", "ICT_Cost", "Contract_Cost", "activity_occurrence_id", "staff_group"
   )]
   
-  DBI::dbWriteTable(con, "stg_ict_costing_tbl", ict_cost_table, overwrite = TRUE)
-  
-  DBI::dbExecute(con, "
-    DELETE FROM ict_costing_tbl
-    WHERE (CPMS_ID, study_site, scenario_id) IN (
-      SELECT DISTINCT CPMS_ID, study_site, scenario_id
+  DBI::dbWithTransaction(con, {
+    DBI::dbWriteTable(con, "stg_ict_costing_tbl", ict_cost_table, overwrite = TRUE)
+    
+    DBI::dbExecute(con, "
+      DELETE FROM ict_costing_tbl
+      WHERE (CPMS_ID, study_site, scenario_id) IN (
+        SELECT DISTINCT CPMS_ID, study_site, scenario_id
+        FROM stg_ict_costing_tbl
+      )
+    ")
+    
+    DBI::dbExecute(con, "
+      INSERT INTO ict_costing_tbl (
+        CPMS_ID, study_site, scenario_id, Study, Visit_Number, Study_Arm, Visit_Label,
+        Activity_Name, ICT_Cost, Contract_Cost, activity_occurrence_id, staff_group
+      )
+      SELECT
+        CPMS_ID, study_site, scenario_id, Study, Visit_Number, Study_Arm, Visit_Label,
+        Activity_Name, ICT_Cost, Contract_Cost, activity_occurrence_id, staff_group
       FROM stg_ict_costing_tbl
-    )
-  ")
-  
-  DBI::dbExecute(con, "
-    INSERT INTO ict_costing_tbl (
-      CPMS_ID, study_site, scenario_id, Study, Visit_Number, Study_Arm, Visit_Label,
-      Activity_Name, ICT_Cost, Contract_Cost, activity_occurrence_id, staff_group
-    )
-    SELECT
-      CPMS_ID, study_site, scenario_id, Study, Visit_Number, Study_Arm, Visit_Label,
-      Activity_Name, ICT_Cost, Contract_Cost, activity_occurrence_id, staff_group
-    FROM stg_ict_costing_tbl
-  ")
-  
-  DBI::dbExecute(con, "DROP TABLE stg_ict_costing_tbl")
+    ")
+    
+    DBI::dbExecute(con, "DROP TABLE stg_ict_costing_tbl")
+  })
   invisible(TRUE)
 }
 

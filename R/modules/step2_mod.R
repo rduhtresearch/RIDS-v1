@@ -440,18 +440,20 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
       app_log_info("step2", "Save started")
       
       tryCatch({
-        dbExecute(CON,
-                  paste(
-                    "DELETE FROM ict_costing_tbl",
-                    "WHERE CPMS_ID = ? AND study_site = ? AND scenario_id = ?"
-                  ),
-                  params = list(
-                    as.character(shared_state$cpms_id),
-                    as.character(shared_state$study_site),
-                    as.character(shared_state$scenario_id)
-                  )
-        )
-        dbAppendTable(CON, "ict_costing_tbl", step2_strip_state_columns(working_data$df))
+        DBI::dbWithTransaction(CON, {
+          dbExecute(CON,
+                    paste(
+                      "DELETE FROM ict_costing_tbl",
+                      "WHERE CPMS_ID = ? AND study_site = ? AND scenario_id = ?"
+                    ),
+                    params = list(
+                      as.character(shared_state$cpms_id),
+                      as.character(shared_state$study_site),
+                      as.character(shared_state$scenario_id)
+                    )
+          )
+          dbAppendTable(CON, "ict_costing_tbl", step2_strip_state_columns(working_data$df))
+        })
 
         log_event(
           level = "INFO",
