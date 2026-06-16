@@ -7,6 +7,7 @@ RIDS currently uses a lightweight manual deployment process.
 - GitHub is the source of truth for code.
 - The live app runs from versioned folders under `releases/`.
 - Shared runtime state lives under `shared/`.
+- User laptops sync the active release into a local cache before launch.
 - Maintainers run local R checks, pull the latest code into the shared-drive clone, and publish a named release with one R script.
 
 Users still launch the app by opening `deployment/Launch RIDS.bat`.
@@ -41,6 +42,7 @@ Important points:
 
 - `releases/` contains code only.
 - `shared/` contains runtime state only.
+- User laptops run the active release from a local cache under `%LOCALAPPDATA%\RIDS\releases\`.
 - `current_release.txt` tells the launcher which version is live.
 - `deploy_log.tsv` records publish and rollback activity.
 - `shared/deployment_config.R` now also contains the stable `CREDENTIAL_SECRET` used to decrypt saved user API keys after backup and restore.
@@ -77,6 +79,16 @@ What setup does:
 7. Creates that first live release from the current working tree so the launcher works immediately.
 8. Generates or preserves the stable `CREDENTIAL_SECRET` used for encrypted user API keys.
 
+## Local Cache Model
+
+Users no longer run the Shiny app code directly from the shared drive.
+
+- The shared drive still stores `releases/` and all `shared/` runtime state.
+- `deployment/Launch RIDS.bat` reads `shared/current_release.txt`, syncs that release into the user's local cache, and starts RIDS from the local cached copy.
+- `deployment/Prepare RIDS.bat` now prepares packages from the local cached active release.
+- The default cache location is `%LOCALAPPDATA%\RIDS\releases\`.
+- Support can rebuild the cache by deleting `%LOCALAPPDATA%\RIDS\` on the user's laptop, then rerunning `deployment/Prepare RIDS.bat` or `deployment/Launch RIDS.bat`.
+
 ## Development and Release Flow
 
 The current workflow is:
@@ -103,8 +115,9 @@ Normal users only need these steps:
 1. Make sure a maintainer has already run `deployment/Prepare RIDS.bat` on that laptop.
 2. Open `deployment/Launch RIDS.bat`.
 3. Wait a few seconds.
-4. Let the browser open automatically.
-5. Sign in.
+4. Let the launcher sync the current release to the local cache if needed.
+5. Let the browser open automatically.
+6. Sign in.
 
 ## Operator Reference Commands
 

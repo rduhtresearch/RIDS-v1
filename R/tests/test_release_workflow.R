@@ -117,6 +117,107 @@ run_release_workflow_tests <- function() {
     any(grepl("rollback\tv0.4.1\tsuccess", deploy_log, fixed = TRUE))
   )
 
+  cat("\n[ local cached release sync ]\n")
+  local_cache_root <- file.path(temp_root, "local-cache")
+  v041_sync <- sync_release_to_local_cache(
+    releases_dir = releases_dir,
+    current_release = "v0.4.1",
+    local_cache_root = local_cache_root
+  )
+  v041_sync_again <- sync_release_to_local_cache(
+    releases_dir = releases_dir,
+    current_release = "v0.4.1",
+    local_cache_root = local_cache_root
+  )
+  v050_sync <- sync_release_to_local_cache(
+    releases_dir = releases_dir,
+    current_release = "v0.5.0",
+    local_cache_root = local_cache_root
+  )
+  rollback_sync <- sync_release_to_local_cache(
+    releases_dir = releases_dir,
+    current_release = "v0.4.1",
+    local_cache_root = local_cache_root
+  )
+
+  .release_expect("initial local sync copies v0.4.1", isTRUE(v041_sync$synced))
+  .release_expect("warm local sync skips recopy", !isTRUE(v041_sync_again$synced))
+  .release_expect("upgrade sync copies v0.5.0", isTRUE(v050_sync$synced))
+  .release_expect("rollback reuses cached v0.4.1", !isTRUE(rollback_sync$synced))
+  .release_expect("v0.4.1 cached locally", dir.exists(file.path(local_cache_root, "releases", "v0.4.1")))
+  .release_expect("v0.5.0 cached locally", dir.exists(file.path(local_cache_root, "releases", "v0.5.0")))
+
+  cat("\n[ forced republish refreshes matching cache ]\n")
+  app_path <- file.path(temp_repo, "app.R")
+  app_lines <- readLines(app_path, warn = FALSE)
+  app_lines <- c(app_lines, "", "# release workflow refresh marker")
+  writeLines(app_lines, app_path, useBytes = TRUE)
+
+  refresh_result <- run_release_command(c("publish-local", "--version", "v0.5.0", "--force"))
+  refreshed_sync <- sync_release_to_local_cache(
+    releases_dir = releases_dir,
+    current_release = "v0.5.0",
+    local_cache_root = local_cache_root
+  )
+  refreshed_app_lines <- readLines(file.path(refreshed_sync$app_dir, "app.R"), warn = FALSE)
+
+  .release_expect("forced publish-local v0.5.0 succeeds", identical(refresh_result$status, 0L))
+  .release_expect("forced republish refreshes local cache", isTRUE(refreshed_sync$synced))
+  .release_expect(
+    "refreshed local cache includes rebuilt release contents",
+    any(grepl("release workflow refresh marker", refreshed_app_lines, fixed = TRUE))
+  )
+
+  cat("\n[ invalid release does not replace good cache ]\n")
+  broken_release_dir <- file.path(releases_dir, "v9.9.9")
+  dir.create(broken_release_dir, recursive = TRUE, showWarnings = FALSE)
+  file.copy(file.path(releases_dir, "v0.4.1", "global.R"), file.path(broken_release_dir, "global.R"), overwrite = TRUE)
+  dir.create(file.path(broken_release_dir, "R"), recursive = TRUE, showWarnings = FALSE)
+  dir.create(file.path(broken_release_dir, "www"), recursive = TRUE, showWarnings = FALSE)
+
+  broken_sync_error <- tryCatch({
+    sync_release_to_local_cache(
+      releases_dir = releases_dir,
+      current_release = "v9.9.9",
+      local_cache_root = local_cache_root
+    )
+    NULL
+  }, error = function(e) e)
+
+  .release_expect("broken release sync fails", inherits(broken_sync_error, "error"))
+  .release_expect(
+    "good cached release remains available after failed sync",
+    dir.exists(file.path(local_cache_root, "releases", "v0.5.0"))
+  )
+
+  cat("\n[ generated launchers use local cache sync ]\n")
+  launcher_path <- file.path(temp_root, "launch_app.R")
+  prepare_path <- file.path(temp_root, "prepare_app.R")
+  write_launcher_r_script(
+    path = launcher_path,
+    releases_dir = releases_dir,
+    current_release_path = current_release_path,
+    config_path = config_path,
+    app_host = "127.0.0.1",
+    app_port = 3838L
+  )
+  write_prepare_r_script(
+    path = prepare_path,
+    releases_dir = releases_dir,
+    current_release_path = current_release_path
+  )
+
+  launcher_lines <- readLines(launcher_path, warn = FALSE)
+  prepare_lines <- readLines(prepare_path, warn = FALSE)
+  .release_expect(
+    "launcher script syncs the active release locally",
+    any(grepl("sync_release_to_local_cache", launcher_lines, fixed = TRUE))
+  )
+  .release_expect(
+    "prepare script uses the local cached release",
+    any(grepl("sync_release_to_local_cache", prepare_lines, fixed = TRUE))
+  )
+
   cat("\n", strrep("=", 60), "\n", sep = "")
   cat("PASSED: ", .release_passed, "    FAILED: ", .release_failed, "\n", sep = "")
   cat(strrep("=", 60), "\n", sep = "")

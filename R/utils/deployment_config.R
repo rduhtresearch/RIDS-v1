@@ -208,12 +208,210 @@ write_deployment_config <- function(path, config) {
   invisible(path)
 }
 
+local_release_cache_root <- function(root = NULL) {
+  root <- trimws(as.character(root %||% ""))
+  if (nzchar(root)) {
+    return(normalizePath(root, winslash = "/", mustWork = FALSE))
+  }
+
+  env_root <- trimws(Sys.getenv("RIDS_LOCAL_CACHE_DIR", unset = ""))
+  if (nzchar(env_root)) {
+    return(normalizePath(env_root, winslash = "/", mustWork = FALSE))
+  }
+
+  local_appdata <- trimws(Sys.getenv("LOCALAPPDATA", unset = ""))
+  if (nzchar(local_appdata)) {
+    return(normalizePath(file.path(local_appdata, "RIDS"), winslash = "/", mustWork = FALSE))
+  }
+
+  normalizePath(file.path(path.expand("~"), ".rids"), winslash = "/", mustWork = FALSE)
+}
+
+release_cache_marker_path <- function(release_dir) {
+  file.path(release_dir, ".release_cache.dcf")
+}
+
+release_cache_signature <- function(release_dir) {
+  if (!dir.exists(release_dir)) {
+    return("")
+  }
+
+  files <- list.files(release_dir, recursive = TRUE, all.files = TRUE, no.. = TRUE, full.names = TRUE)
+  files <- files[file.info(files)$isdir %in% FALSE]
+
+  if (length(files) == 0L) {
+    return("")
+  }
+
+  relative_files <- substring(files, nchar(paste0(normalizePath(release_dir, winslash = "/", mustWork = TRUE), "/")) + 1L)
+  hashes <- unname(tools::md5sum(files))
+  paste(paste(relative_files, hashes, sep = ":"), collapse = "|")
+}
+
+read_release_cache_marker <- function(path) {
+  if (!file.exists(path)) {
+    return(list())
+  }
+
+  contents <- tryCatch(read.dcf(path), error = function(e) NULL)
+  if (is.null(contents) || nrow(contents) == 0L) {
+    return(list())
+  }
+
+  as.list(contents[1, , drop = TRUE])
+}
+
+write_release_cache_marker <- function(path, release, source_dir, source_signature) {
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+
+  marker <- data.frame(
+    release = as.character(release),
+    source_dir = normalizePath(source_dir, winslash = "/", mustWork = FALSE),
+    source_signature = as.character(source_signature),
+    synced_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+    stringsAsFactors = FALSE
+  )
+
+  write.dcf(marker, file = path)
+  invisible(path)
+}
+
+prune_local_release_cache <- function(local_releases_dir, current_release, keep_previous = 1L) {
+  if (!dir.exists(local_releases_dir)) {
+    return(invisible(character()))
+  }
+
+  keep_previous <- max(0L, as.integer(keep_previous %||% 0L))
+  entries <- list.dirs(local_releases_dir, recursive = FALSE, full.names = TRUE)
+  entries <- entries[dir.exists(entries)]
+
+  if (length(entries) == 0L) {
+    return(invisible(character()))
+  }
+
+  current_dir <- normalizePath(file.path(local_releases_dir, current_release), winslash = "/", mustWork = FALSE)
+  entries <- unique(normalizePath(entries, winslash = "/", mustWork = FALSE))
+  entries <- entries[entries != current_dir]
+
+  if (length(entries) <= keep_previous) {
+    return(invisible(character()))
+  }
+
+  info <- file.info(entries)
+  ordered_entries <- entries[order(info$mtime, decreasing = TRUE, na.last = TRUE)]
+  to_remove <- ordered_entries[seq.int(keep_previous + 1L, length(ordered_entries))]
+
+  removed <- character()
+  for (entry in to_remove) {
+    unlink(entry, recursive = TRUE, force = TRUE)
+    if (!dir.exists(entry)) {
+      removed <- c(removed, entry)
+    }
+  }
+
+  invisible(removed)
+}
+
+sync_release_to_local_cache <- function(releases_dir,
+                                        current_release,
+                                        local_cache_root = NULL,
+                                        keep_previous = 1L) {
+  releases_dir <- normalizePath(releases_dir, winslash = "/", mustWork = TRUE)
+  current_release <- trimws(as.character(current_release %||% ""))
+
+  if (!nzchar(current_release)) {
+    stop("A current release is required to sync the local cache.")
+  }
+
+  source_release_dir <- file.path(releases_dir, current_release)
+  if (!dir.exists(source_release_dir)) {
+    stop("The active release folder does not exist: ", source_release_dir)
+  }
+
+  ensure_required_app_files(source_release_dir)
+
+  cache_root <- local_release_cache_root(local_cache_root)
+  local_releases_dir <- file.path(cache_root, "releases")
+  target_dir <- file.path(local_releases_dir, current_release)
+  marker_path <- release_cache_marker_path(target_dir)
+  source_signature <- release_cache_signature(source_release_dir)
+  marker <- read_release_cache_marker(marker_path)
+
+  cache_is_ready <- dir.exists(target_dir) &&
+    identical(marker$release %||% "", current_release) &&
+    identical(marker$source_signature %||% "", source_signature)
+
+  if (isTRUE(cache_is_ready)) {
+    ensure_required_app_files(target_dir)
+    prune_local_release_cache(local_releases_dir, current_release, keep_previous = keep_previous)
+
+    return(list(
+      app_dir = normalizePath(target_dir, winslash = "/", mustWork = TRUE),
+      cache_root = cache_root,
+      source_release_dir = normalizePath(source_release_dir, winslash = "/", mustWork = TRUE),
+      marker_path = marker_path,
+      source_signature = source_signature,
+      synced = FALSE
+    ))
+  }
+
+  dir.create(local_releases_dir, recursive = TRUE, showWarnings = FALSE)
+
+  temp_dir <- file.path(
+    local_releases_dir,
+    sprintf("%s-sync-%s-%s", current_release, Sys.getpid(), format(Sys.time(), "%Y%m%d%H%M%S"))
+  )
+  backup_dir <- paste0(target_dir, ".backup-", Sys.getpid())
+
+  unlink(temp_dir, recursive = TRUE, force = TRUE)
+  unlink(backup_dir, recursive = TRUE, force = TRUE)
+  on.exit(unlink(temp_dir, recursive = TRUE, force = TRUE), add = TRUE)
+  on.exit(unlink(backup_dir, recursive = TRUE, force = TRUE), add = TRUE)
+
+  copy_directory_contents(source_release_dir, temp_dir)
+  ensure_required_app_files(temp_dir)
+  write_release_cache_marker(
+    path = release_cache_marker_path(temp_dir),
+    release = current_release,
+    source_dir = source_release_dir,
+    source_signature = source_signature
+  )
+
+  if (dir.exists(target_dir)) {
+    if (!file.rename(target_dir, backup_dir)) {
+      stop("Failed to move the previous local cached release out of the way: ", target_dir)
+    }
+  }
+
+  renamed <- file.rename(temp_dir, target_dir)
+  if (!isTRUE(renamed)) {
+    if (dir.exists(backup_dir) && !dir.exists(target_dir)) {
+      file.rename(backup_dir, target_dir)
+    }
+    stop("Failed to activate the synced local cached release: ", target_dir)
+  }
+
+  unlink(backup_dir, recursive = TRUE, force = TRUE)
+  ensure_required_app_files(target_dir)
+  prune_local_release_cache(local_releases_dir, current_release, keep_previous = keep_previous)
+
+  list(
+    app_dir = normalizePath(target_dir, winslash = "/", mustWork = TRUE),
+    cache_root = cache_root,
+    source_release_dir = normalizePath(source_release_dir, winslash = "/", mustWork = TRUE),
+    marker_path = release_cache_marker_path(target_dir),
+    source_signature = source_signature,
+    synced = TRUE
+  )
+}
+
 write_launcher_r_script <- function(path,
                                     releases_dir,
                                     current_release_path,
                                     config_path,
                                     app_host,
-                                    app_port) {
+                                    app_port,
+                                    support_script_path = file.path(dirname(dirname(path)), "R", "utils", "deployment_config.R")) {
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
 
   lines <- c(
@@ -221,6 +419,7 @@ write_launcher_r_script <- function(path,
     sprintf('releases_dir <- "%s"', normalizePath(releases_dir, winslash = "/", mustWork = FALSE)),
     sprintf('current_release_path <- "%s"', normalizePath(current_release_path, winslash = "/", mustWork = FALSE)),
     sprintf('config_path <- "%s"', normalizePath(config_path, winslash = "/", mustWork = FALSE)),
+    sprintf('support_script_path <- "%s"', normalizePath(support_script_path, winslash = "/", mustWork = FALSE)),
     sprintf('app_host <- "%s"', app_host),
     sprintf("app_port <- %sL", as.integer(app_port)),
     "",
@@ -232,14 +431,15 @@ write_launcher_r_script <- function(path,
     "  stop('deployment_config.R was not found: ', config_path)",
     "}",
     "",
+    "if (!file.exists(support_script_path)) {",
+    "  stop('Launcher support script was not found: ', support_script_path)",
+    "}",
+    "",
+    "sys.source(support_script_path, envir = globalenv())",
+    "",
     "current_release <- trimws(readLines(current_release_path, warn = FALSE, n = 1L))",
     "if (!nzchar(current_release)) {",
     "  stop('current_release.txt is empty: ', current_release_path)",
-    "}",
-    "",
-    "app_dir <- file.path(releases_dir, current_release)",
-    "if (!file.exists(file.path(app_dir, 'app.R'))) {",
-    "  stop('app.R was not found in the active release folder: ', app_dir)",
     "}",
     "",
     "ensure_launcher_library <- function() {",
@@ -260,6 +460,9 @@ write_launcher_r_script <- function(path,
     "}",
     "",
     "ensure_launcher_library()",
+    "sync_result <- sync_release_to_local_cache(releases_dir = releases_dir, current_release = current_release)",
+    "app_dir <- sync_result$app_dir",
+    "message(if (isTRUE(sync_result$synced)) paste0('Synced RIDS ', current_release, ' to local cache: ', app_dir) else paste0('Using local cached RIDS ', current_release, ': ', app_dir))",
     "Sys.setenv(RIDS_CONFIG_PATH = config_path)",
     "Sys.setenv(RIDS_APP_VERSION = current_release)",
     "release_mtime <- file.info(current_release_path)$mtime",
@@ -277,26 +480,29 @@ write_launcher_r_script <- function(path,
 
 write_prepare_r_script <- function(path,
                                    releases_dir,
-                                   current_release_path) {
+                                   current_release_path,
+                                   support_script_path = file.path(dirname(dirname(path)), "R", "utils", "deployment_config.R")) {
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
 
   lines <- c(
     "# Auto-generated by R/SETUP/new_setup.R",
     sprintf('releases_dir <- "%s"', normalizePath(releases_dir, winslash = "/", mustWork = FALSE)),
     sprintf('current_release_path <- "%s"', normalizePath(current_release_path, winslash = "/", mustWork = FALSE)),
+    sprintf('support_script_path <- "%s"', normalizePath(support_script_path, winslash = "/", mustWork = FALSE)),
     "",
     "if (!file.exists(current_release_path)) {",
     "  stop('No active release has been published yet. Run R/SETUP/release_publish.R publish-local --version vX.Y.Z first.')",
     "}",
     "",
+    "if (!file.exists(support_script_path)) {",
+    "  stop('Launcher support script was not found: ', support_script_path)",
+    "}",
+    "",
+    "sys.source(support_script_path, envir = globalenv())",
+    "",
     "current_release <- trimws(readLines(current_release_path, warn = FALSE, n = 1L))",
     "if (!nzchar(current_release)) {",
     "  stop('current_release.txt is empty: ', current_release_path)",
-    "}",
-    "",
-    "app_dir <- file.path(releases_dir, current_release)",
-    "if (!file.exists(file.path(app_dir, 'R', 'dependencies.R'))) {",
-    "  stop('R/dependencies.R was not found in the active release folder: ', app_dir)",
     "}",
     "",
     "ensure_launcher_library <- function() {",
@@ -317,6 +523,11 @@ write_prepare_r_script <- function(path,
     "}",
     "",
     "ensure_launcher_library()",
+    "sync_result <- sync_release_to_local_cache(releases_dir = releases_dir, current_release = current_release)",
+    "app_dir <- sync_result$app_dir",
+    "if (!file.exists(file.path(app_dir, 'R', 'dependencies.R'))) {",
+    "  stop('R/dependencies.R was not found in the local cached release folder: ', app_dir)",
+    "}",
     "message('Preparing RIDS packages for ', current_release)",
     "source(file.path(app_dir, 'R', 'dependencies.R'), local = FALSE)",
     "message('RIDS package preparation complete for ', current_release)"

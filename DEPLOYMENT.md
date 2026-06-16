@@ -10,8 +10,9 @@ The release path is:
 2. Pull the latest `main` into the shared-drive clone.
 3. Run local R checks.
 4. Publish the checked-out code as a named release.
-5. Launch the app and verify it.
-6. Roll back to the previous release if needed.
+5. User laptops sync the active release to a local cache and launch it from `C:`.
+6. Launch the app and verify it.
+7. Roll back to the previous release if needed.
 
 This guide is for maintainers who manage the shared-drive deployment.
 
@@ -36,6 +37,14 @@ Example path:
 ```text
 P:\RESEARCH SYSTEMS\RIDS_\RIDS-v1
 ```
+
+User laptops keep a local cache of the active release under `%LOCALAPPDATA%\RIDS\releases\`.
+The shared drive still remains the source of truth for:
+
+- `releases/`
+- `shared/current_release.txt`
+- `shared/deployment_config.R`
+- the DuckDB file and other runtime folders referenced by that config
 
 ## First-Time Maintainer Setup
 
@@ -114,8 +123,9 @@ What it does:
 
 1. Finds `Rscript.exe`
 2. Locates the active release
-3. Creates or reuses the user R library
-4. Installs missing packages from the active release's `R/dependencies.R`
+3. Syncs the active release into the local cache if needed
+4. Creates or reuses the user R library
+5. Installs missing packages from the local cached release's `R/dependencies.R`
 
 The first run can take several minutes.
 
@@ -191,6 +201,7 @@ What this does:
 2. Runs the release smoke check
 3. Updates `shared/current_release.txt`
 4. Writes a line to `shared/deploy_log.tsv`
+5. Leaves user laptops to pick up the new release automatically on the next launch
 
 The version name is a manual release label. It does not need to match a Git tag.
 
@@ -229,6 +240,7 @@ Confirm:
 - the app opens successfully
 - the visible change is present
 - the footer version pill matches the release version
+- `deployment\launch_rids.log` shows the release synced to the local cache when needed
 
 ## Rebuilding an Existing Release Folder
 
@@ -267,6 +279,7 @@ What rollback does:
 1. Verifies `releases/v0.4.1/` exists
 2. Updates `shared/current_release.txt`
 3. Writes a line to `shared/deploy_log.tsv`
+4. Leaves user laptops to resync that older release on the next launch
 
 After rollback:
 
@@ -319,6 +332,15 @@ Make sure:
 - you are working inside the shared-drive repo clone
 - the repo still contains `shared/`, `releases/`, and `deployment/`
 
+### Rebuild the local cache
+
+If a single laptop has a stale or damaged local cache:
+
+1. Close RIDS
+2. Delete `%LOCALAPPDATA%\RIDS\`
+3. Run `deployment\Prepare RIDS.bat`
+4. Retry `deployment\Launch RIDS.bat`
+
 ### `RIDS did not respond on time`
 
 Check:
@@ -326,6 +348,7 @@ Check:
 1. whether `deployment\Prepare RIDS.bat` has been run on that laptop
 2. whether the app eventually started anyway
 3. `deployment\launch_rids.log` for startup details
+4. whether `%LOCALAPPDATA%\RIDS\releases\` was created on the laptop
 
 If the laptop has never been prepared, run `deployment\Prepare RIDS.bat` first, then retry the normal launcher.
 
