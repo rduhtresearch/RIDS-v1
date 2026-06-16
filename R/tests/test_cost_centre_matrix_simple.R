@@ -71,7 +71,7 @@ run_cost_centre_matrix_simple_tests <- function() {
       DIRECT_COST = c("50007", "Speciality", "99999"),
       `INDIRECT_25 [PI CB]` = c("", "Speciality", ""),
       TRD40 = c("", "70040", ""),
-      MMF_CRF = c("81000", "", "")
+      MFF_CRF = c("81000", "", "")
     ),
     file = matrix_path,
     row.names = FALSE
@@ -102,7 +102,7 @@ run_cost_centre_matrix_simple_tests <- function() {
   .ccm_expect("case-insensitive activity type join works", identical(resolved$cost_code[[1]], "50007"))
   .ccm_expect("case-insensitive staff role join works", identical(resolved$cost_code[[1]], "50007"))
   .ccm_expect("case-insensitive split type join works", identical(resolved$cost_code[[1]], "50007"))
-  .ccm_expect("MMF_CRF alias maps to MFF split posting line type", identical(resolved$cost_code[[5]], "81000"))
+  .ccm_expect("MFF_CRF alias maps to MFF split posting line type", identical(resolved$cost_code[[5]], "81000"))
   .ccm_expect("unmatched non-speciality rows remain NA", is.na(resolved$cost_code[[3]]))
   .ccm_expect("training fee rows are excluded from matching", is.na(resolved$cost_code[[4]]))
   .ccm_expect("summary tracks unmatched rows", identical(summary$unmatched_rows, 2L))
