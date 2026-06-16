@@ -42,7 +42,8 @@ COST_CENTRE_MATRIX_COLUMN_ALIASES <- c(
   "INDIRECT_50" = "INDIRECT_50_DELIVERY",
   "RD_CAPACITY" = "CAPACITY_RD",
   "TRD40" = "DIRECT_40_PI",
-  "TRD60" = "DIRECT_60_TEAM"
+  "TRD60" = "DIRECT_60_TEAM",
+  "MMF_CRF" = "MFF_SPLIT_NEW_CC"
 )
 
 cc_get_setting <- function(key, default = "") {

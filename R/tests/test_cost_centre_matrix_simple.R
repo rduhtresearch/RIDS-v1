@@ -56,7 +56,8 @@ run_cost_centre_matrix_simple_tests <- function() {
     ('INDIRECT_50_DELIVERY', 'Indirect Delivery'),
     ('CAPACITY_RD', 'Capacity'),
     ('DIRECT_40_PI', 'TRD40'),
-    ('DIRECT_60_TEAM', 'TRD60')
+    ('DIRECT_60_TEAM', 'TRD60'),
+    ('MFF_SPLIT_NEW_CC', 'MFF split')
   ")
 
   matrix_path <- tempfile(fileext = ".csv")
@@ -69,7 +70,8 @@ run_cost_centre_matrix_simple_tests <- function() {
       Notes = c("", "", "Training Fee"),
       DIRECT_COST = c("50007", "Speciality", "99999"),
       `INDIRECT_25 [PI CB]` = c("", "Speciality", ""),
-      TRD40 = c("", "70040", "")
+      TRD40 = c("", "70040", ""),
+      MMF_CRF = c("81000", "", "")
     ),
     file = matrix_path,
     row.names = FALSE
@@ -77,16 +79,16 @@ run_cost_centre_matrix_simple_tests <- function() {
 
   valid <- validate_cost_centre_matrix_file(matrix_path)
   .ccm_expect("valid matrix CSV passes validation", isTRUE(valid$valid))
-  .ccm_expect("validation detects split columns", length(valid$split_columns) == 3L)
+  .ccm_expect("validation detects split columns", length(valid$split_columns) == 4L)
   .ccm_expect("non-split columns are ignored", !"Tab" %in% valid$split_columns)
 
   dbExecute(con, "INSERT INTO app_settings (key, value) VALUES ('cost_centre_matrix_file', ?)", params = list(matrix_path))
 
   rows <- tibble(
-    Department = c("study team", "STUDY TEAM", "Study Team", "Study Team"),
-    activity_type = c("baseline", "BASELINE", "Baseline", "Training"),
-    Staff_Role = c("admin/data entry", "MEDICAL STAFF", "Medical Staff", "Medical Staff"),
-    posting_line_type_id = c("direct", "indirect_25_pi", "CAPACITY_RD", "DIRECT"),
+    Department = c("study team", "STUDY TEAM", "Study Team", "Study Team", "Study Team"),
+    activity_type = c("baseline", "BASELINE", "Baseline", "Training", "Baseline"),
+    Staff_Role = c("admin/data entry", "MEDICAL STAFF", "Medical Staff", "Medical Staff", "Admin/Data Entry"),
+    posting_line_type_id = c("direct", "indirect_25_pi", "CAPACITY_RD", "DIRECT", "MFF_SPLIT_NEW_CC"),
     cost_code = NA_character_
   )
 
@@ -100,6 +102,7 @@ run_cost_centre_matrix_simple_tests <- function() {
   .ccm_expect("case-insensitive activity type join works", identical(resolved$cost_code[[1]], "50007"))
   .ccm_expect("case-insensitive staff role join works", identical(resolved$cost_code[[1]], "50007"))
   .ccm_expect("case-insensitive split type join works", identical(resolved$cost_code[[1]], "50007"))
+  .ccm_expect("MMF_CRF alias maps to MFF split posting line type", identical(resolved$cost_code[[5]], "81000"))
   .ccm_expect("unmatched non-speciality rows remain NA", is.na(resolved$cost_code[[3]]))
   .ccm_expect("training fee rows are excluded from matching", is.na(resolved$cost_code[[4]]))
   .ccm_expect("summary tracks unmatched rows", identical(summary$unmatched_rows, 2L))
