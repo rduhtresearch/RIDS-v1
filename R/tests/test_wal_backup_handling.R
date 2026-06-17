@@ -24,6 +24,10 @@ suppressPackageStartupMessages({
 # cleanly so no WAL is left behind.
 .wal_create_clean_db <- function(path, ids) {
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  # Start from a clean slate. A best-effort WAL-staging attempt can leave a
+  # partial/invalid file here on platforms that lock open DB files (e.g. Windows),
+  # which would otherwise make duckdb() fail with "not a valid DuckDB database file".
+  unlink(c(path, paste0(path, ".wal")), force = TRUE)
   drv <- duckdb::duckdb(dbdir = path)
   con <- DBI::dbConnect(drv)
   DBI::dbExecute(con, "CREATE TABLE demo (id INTEGER, label VARCHAR)")
