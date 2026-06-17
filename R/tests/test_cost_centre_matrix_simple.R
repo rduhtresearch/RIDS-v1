@@ -108,6 +108,15 @@ run_cost_centre_matrix_simple_tests <- function() {
   .ccm_expect("summary tracks unmatched rows", identical(summary$unmatched_rows, 2L))
   .ccm_expect("unmatched report includes unmatched rows", nrow(unmatched_report) == 2L)
   .ccm_expect(
+    "normalized join helper columns are not returned for persistence",
+    !any(c(
+      "Department_join",
+      "activity_type_join",
+      "Staff_Role_join",
+      "posting_line_type_join"
+    ) %in% names(resolved))
+  )
+  .ccm_expect(
     "unmatched report uses normalized join fields",
     identical(
       names(unmatched_report),
