@@ -6,6 +6,25 @@ step4_templates_for_export <- function(edited_templates, original_templates) {
   original_templates
 }
 
+step4_display_mode <- function(current_step = NULL,
+                               templates = NULL,
+                               validation_failed = FALSE,
+                               validation_failure_latched = FALSE) {
+  if (isTRUE(validation_failed) || isTRUE(validation_failure_latched)) {
+    return("validation_failed")
+  }
+
+  if (!identical(current_step, "step4")) {
+    return("idle")
+  }
+
+  if (is.null(templates) || length(templates) == 0) {
+    return("pending")
+  }
+
+  "ready"
+}
+
 # step4_UI <- function(id) {
 #   ns <- NS(id)
 #   tagList(
@@ -612,6 +631,14 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     validation_failed <- reactiveVal(FALSE)
     rollback_failed_message <- reactiveVal(NULL)
     validation_failure_latched <- reactiveVal(FALSE)
+    current_display_mode <- reactive({
+      step4_display_mode(
+        current_step = shared_state$current_step,
+        templates = templates(),
+        validation_failed = validation_failed(),
+        validation_failure_latched = validation_failure_latched()
+      )
+    })
     
     # ── Edge template builder module ─────────────────────────────────────────
     edited_templates <- edgeBuilderServer(
@@ -759,7 +786,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     }
 
     output$step4_footer <- renderUI({
-      if (isTRUE(validation_failed())) {
+      if (!identical(current_display_mode(), "ready")) {
         return(NULL)
       }
 
@@ -770,10 +797,33 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     })
 
     output$step4_body <- renderUI({
-      if (isTRUE(validation_failed())) {
+      display_mode <- current_display_mode()
+
+      if (identical(display_mode, "validation_failed")) {
         return(tagList(
           uiOutput(session$ns("cost_centre_validation_panel"))
         ))
+      }
+
+      if (!identical(display_mode, "ready")) {
+        return(
+          div(
+            style = paste(
+              "padding: 1rem;",
+              "border-radius: 6px;",
+              "background: #f7f9fb;",
+              "color: #697786;"
+            ),
+            div(
+              style = "font-weight: 600; color: #1d2a36; margin-bottom: 0.35rem;",
+              "Preparing template output"
+            ),
+            div(
+              "RIDS is still preparing this study for template generation.",
+              "If cost centre validation fails, the failure report will appear here."
+            )
+          )
+        )
       }
 
       tagList(
@@ -1238,7 +1288,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     
     # ── Preview selected arm ──────────────────────────────────────────────────
     output$preview_table <- renderReactable({
-      req(!isTRUE(validation_failed()))
+      req(identical(current_display_mode(), "ready"))
       req(input$arm_select)
       
       tpls <- edited_templates()
@@ -1286,7 +1336,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     
     # ── Save status ───────────────────────────────────────────────────────────
     output$save_status <- renderUI({
-      req(!isTRUE(validation_failed()))
+      req(identical(current_display_mode(), "ready"))
       req(zip_path())
       div(
         style = "display: flex; align-items: center; gap: 0.5rem;",
@@ -1335,7 +1385,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       contentType = "text/csv",
       content = function(file) {
         unmatched <- unmatched_cost_centres()
-        req(isTRUE(validation_failed()))
+        req(identical(current_display_mode(), "validation_failed"))
         req(is.data.frame(unmatched), nrow(unmatched) > 0)
         write.csv(unmatched, file = file, row.names = FALSE, na = "")
       }
@@ -1343,7 +1393,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     
     # ── Complete: success modal + navigate + reset ──────────────────────────
     observeEvent(input$complete, {
-      req(!isTRUE(validation_failed()))
+      req(identical(current_display_mode(), "ready"))
 
       final_templates <- step4_templates_for_export(edited_templates(), templates())
       req(final_templates)
@@ -1419,7 +1469,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     
     # ── Disable Complete until templates exist ──────────────────────────────
     observe({
-      shinyjs::toggleState("complete", condition = !isTRUE(validation_failed()) && !is.null(templates()))
+      shinyjs::toggleState("complete", condition = identical(current_display_mode(), "ready"))
     })
     
   })
