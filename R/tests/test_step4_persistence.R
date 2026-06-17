@@ -58,6 +58,58 @@ run_step4_persistence_tests <- function() {
     identical(selected_empty_edits, original_templates)
   )
 
+  .step4_expect(
+    "display mode shows validation failure when failure is active",
+    identical(
+      step4_display_mode(
+        current_step = "step4",
+        templates = NULL,
+        validation_failed = TRUE,
+        validation_failure_latched = FALSE
+      ),
+      "validation_failed"
+    )
+  )
+
+  .step4_expect(
+    "display mode keeps validation failure latched even without templates",
+    identical(
+      step4_display_mode(
+        current_step = "step4",
+        templates = NULL,
+        validation_failed = FALSE,
+        validation_failure_latched = TRUE
+      ),
+      "validation_failed"
+    )
+  )
+
+  .step4_expect(
+    "display mode shows pending while step4 has no templates and no failure",
+    identical(
+      step4_display_mode(
+        current_step = "step4",
+        templates = NULL,
+        validation_failed = FALSE,
+        validation_failure_latched = FALSE
+      ),
+      "pending"
+    )
+  )
+
+  .step4_expect(
+    "display mode shows ready when templates exist and no failure is present",
+    identical(
+      step4_display_mode(
+        current_step = "step4",
+        templates = original_templates,
+        validation_failed = FALSE,
+        validation_failure_latched = FALSE
+      ),
+      "ready"
+    )
+  )
+
   cat("\n", strrep("=", 60), "\n", sep = "")
   cat("PASSED: ", .step4_passed, "    FAILED: ", .step4_failed, "\n", sep = "")
   cat(strrep("=", 60), "\n", sep = "")
