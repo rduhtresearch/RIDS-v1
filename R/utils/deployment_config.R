@@ -6,43 +6,48 @@
   x
 })
 
-load_release_management_helpers <- function() {
-  target_env <- parent.frame()
-  required_helpers <- c(
-    "required_app_files",
-    "ensure_required_app_files",
-    "copy_directory_contents"
+required_app_files <- get0("required_app_files", ifnotfound = function() {
+  c(
+    "app.R",
+    "global.R",
+    "R/setup.r",
+    "R/utils/deployment_config.R",
+    "R/utils/auth.r",
+    "R/utils/logging.R"
   )
+})
 
-  helper_exists <- function(name) exists(name, envir = target_env, inherits = TRUE)
+ensure_required_app_files <- get0("ensure_required_app_files", ifnotfound = function(app_dir, required_files = required_app_files()) {
+  app_dir <- normalizePath(app_dir, winslash = "/", mustWork = TRUE)
+  missing_files <- required_files[!file.exists(file.path(app_dir, required_files))]
 
-  if (all(vapply(required_helpers, helper_exists, logical(1)))) {
-    return(invisible(TRUE))
-  }
-
-  caller_ofile <- tryCatch(sys.frame(1)$ofile, error = function(e) "")
-  helper_path <- ""
-
-  if (is.character(caller_ofile) && length(caller_ofile) == 1L && nzchar(caller_ofile)) {
-    helper_path <- file.path(dirname(normalizePath(caller_ofile, winslash = "/", mustWork = TRUE)), "release_management.R")
-  }
-
-  if (nzchar(helper_path) && file.exists(helper_path)) {
-    sys.source(helper_path, envir = target_env)
-  }
-
-  if (!all(vapply(required_helpers, helper_exists, logical(1)))) {
+  if (length(missing_files) > 0) {
     stop(
-      "release_management.R helpers are unavailable. Expected to find: ",
-      paste(required_helpers, collapse = ", "),
-      if (nzchar(helper_path)) paste0(" (looked for ", helper_path, ")") else "."
+      "The app folder is missing required files: ",
+      paste(missing_files, collapse = ", "),
+      "."
     )
   }
 
   invisible(TRUE)
-}
+})
 
-load_release_management_helpers()
+copy_directory_contents <- get0("copy_directory_contents", ifnotfound = function(from_dir, to_dir) {
+  dir.create(to_dir, recursive = TRUE, showWarnings = FALSE)
+
+  entries <- list.files(from_dir, all.files = TRUE, no.. = TRUE, full.names = TRUE)
+  if (length(entries) == 0) {
+    return(invisible(to_dir))
+  }
+
+  ok <- file.copy(entries, to_dir, recursive = TRUE, overwrite = TRUE, copy.mode = TRUE)
+  if (!all(ok)) {
+    failed <- basename(entries[!ok])
+    stop("Failed to copy release files: ", paste(failed, collapse = ", "))
+  }
+
+  invisible(to_dir)
+})
 
 deployment_config_candidates <- function(app_dir = getwd()) {
   env_path <- trimws(Sys.getenv("RIDS_CONFIG_PATH", ""))
