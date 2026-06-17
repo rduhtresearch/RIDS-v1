@@ -76,7 +76,25 @@ ui <- tagList(
   )
 )
 
+# Clean shutdown on last session end (live deployments only).
+# Each laptop runs its own R process serving a single user; when the last browser
+# session goes away we let runApp() return so the existing onStop() handler in
+# global.R checkpoints DuckDB cleanly (folding the WAL back into the main file)
+# instead of relying on the user hard-killing the launcher terminal. A short grace
+# window tolerates page refreshes, which briefly drop to zero sessions before the
+# browser reconnects.
+.rids_session_tracker <- new.env(parent = emptyenv())
+.rids_session_tracker$count <- 0L
+RIDS_SHUTDOWN_GRACE_SECONDS <- suppressWarnings(
+  as.numeric(Sys.getenv("RIDS_SHUTDOWN_GRACE_SECONDS", "25"))
+)
+if (is.na(RIDS_SHUTDOWN_GRACE_SECONDS) || RIDS_SHUTDOWN_GRACE_SECONDS < 0) {
+  RIDS_SHUTDOWN_GRACE_SECONDS <- 25
+}
+
 server <- function(input, output, session) {
+  .rids_session_tracker$count <- .rids_session_tracker$count + 1L
+
   activate_dashboard_tab <- function() {
     updateTabItems(session, "sidebar", selected = "tab_dashboard")
     shinyjs::runjs('$("[data-value=\'tab_dashboard\']").tab("show")')
@@ -84,6 +102,18 @@ server <- function(input, output, session) {
   
   session$onSessionEnded(function() {
     app_log_info("session", "Browser session ended")
+    .rids_session_tracker$count <- .rids_session_tracker$count - 1L
+
+    if (identical(APP_STATUS, "live") && .rids_session_tracker$count <= 0L) {
+      later::later(function() {
+        # Re-check after the grace window: a refresh will have reconnected and
+        # bumped the count back above zero, so we only stop when nobody is left.
+        if (.rids_session_tracker$count <= 0L) {
+          app_log_info("shutdown", "No active sessions remaining; stopping app for clean DuckDB shutdown")
+          shiny::stopApp()
+        }
+      }, delay = RIDS_SHUTDOWN_GRACE_SECONDS)
+    }
   })
   
   output$user_badge <- renderUI({
