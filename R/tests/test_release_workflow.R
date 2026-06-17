@@ -147,32 +147,6 @@ run_release_workflow_tests <- function() {
   .release_expect("v0.4.1 cached locally", dir.exists(file.path(local_cache_root, "releases", "v0.4.1")))
   .release_expect("v0.5.0 cached locally", dir.exists(file.path(local_cache_root, "releases", "v0.5.0")))
 
-  cat("\n[ launcher support script loads release helpers ]\n")
-  bootstrap_cache_root <- file.path(temp_root, "bootstrap-cache")
-  bootstrap_script_path <- file.path(temp_root, "bootstrap_sync.R")
-  writeLines(c(
-    paste0("source(", shQuote(file.path(temp_repo, "R", "utils", "deployment_config.R")), ")"),
-    "result <- sync_release_to_local_cache(",
-    paste0("  releases_dir = ", shQuote(releases_dir), ","),
-    "  current_release = 'v0.4.1',",
-    paste0("  local_cache_root = ", shQuote(bootstrap_cache_root)),
-    ")",
-    "cat(result$app_dir)"
-  ), bootstrap_script_path, useBytes = TRUE)
-  bootstrap_output <- suppressWarnings(system2(
-    rscript_path,
-    args = c("--vanilla", bootstrap_script_path),
-    stdout = TRUE,
-    stderr = TRUE
-  )
-  bootstrap_status <- attr(bootstrap_output, "status") %||% 0L
-
-  .release_expect("deployment_config bootstrap exits zero", identical(bootstrap_status, 0L))
-  .release_expect(
-    "deployment_config bootstrap syncs a release without pre-sourcing release management",
-    dir.exists(file.path(bootstrap_cache_root, "releases", "v0.4.1"))
-  )
-
   cat("\n[ forced republish refreshes matching cache ]\n")
   app_path <- file.path(temp_repo, "app.R")
   app_lines <- readLines(app_path, warn = FALSE)
@@ -216,7 +190,7 @@ run_release_workflow_tests <- function() {
     dir.exists(file.path(local_cache_root, "releases", "v0.5.0"))
   )
 
-  cat("\n[ generated launchers use local cache sync ]\n")
+  cat("\n[ generated launchers use active release directly ]\n")
   launcher_path <- file.path(temp_root, "launch_app.R")
   prepare_path <- file.path(temp_root, "prepare_app.R")
   write_launcher_r_script(
@@ -236,12 +210,20 @@ run_release_workflow_tests <- function() {
   launcher_lines <- readLines(launcher_path, warn = FALSE)
   prepare_lines <- readLines(prepare_path, warn = FALSE)
   .release_expect(
-    "launcher script syncs the active release locally",
-    any(grepl("sync_release_to_local_cache", launcher_lines, fixed = TRUE))
+    "launcher script does not sync a local cache",
+    !any(grepl("sync_release_to_local_cache", launcher_lines, fixed = TRUE))
   )
   .release_expect(
-    "prepare script uses the local cached release",
-    any(grepl("sync_release_to_local_cache", prepare_lines, fixed = TRUE))
+    "prepare script does not sync a local cache",
+    !any(grepl("sync_release_to_local_cache", prepare_lines, fixed = TRUE))
+  )
+  .release_expect(
+    "launcher script resolves the active release folder directly",
+    any(grepl("app_dir <- file.path\\(releases_dir, current_release\\)", launcher_lines))
+  )
+  .release_expect(
+    "prepare script resolves the active release folder directly",
+    any(grepl("app_dir <- file.path\\(releases_dir, current_release\\)", prepare_lines))
   )
 
   cat("\n", strrep("=", 60), "\n", sep = "")
