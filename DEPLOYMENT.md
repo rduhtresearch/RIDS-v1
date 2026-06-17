@@ -78,14 +78,15 @@ source("R/SETUP/manual_backup.R")
 What it does:
 
 1. Reads the live deployment config and finds the production DuckDB file
-2. Copies the full DuckDB file into `P:\RESEARCH SYSTEMS\RIDS_BACKUP\<timestamp>\`
-3. Exports every database table to `csv\` inside the same backup folder
-4. Writes a `backup_manifest.txt` file with the source DB and exported tables
-5. Deletes older backup runs so only the newest 2 successful backups remain
+2. Folds any leftover write-ahead log (`RIDS.duckdb.wal`) back into the DuckDB file so the backup is complete and consistent
+3. Copies the full DuckDB file into `P:\RESEARCH SYSTEMS\RIDS_BACKUP\<timestamp>\`
+4. Exports every database table to `csv\` inside the same backup folder
+5. Writes a `backup_manifest.txt` file with the source DB and exported tables
+6. Deletes older backup runs so only the newest 2 successful backups remain
 
 Keep `shared/deployment_config.R` safe alongside the deployment. It contains the stable `CREDENTIAL_SECRET` used to decrypt saved user API keys after a DB restore.
 
-If possible, ask users to close RIDS before running the backup.
+Ask users to close RIDS before running the backup. Step 2 needs exclusive access to the DuckDB file; if RIDS is still running the backup stops with a clear error rather than copying stale data. (A `.wal` file is normal — it is left behind whenever the app is closed and is consolidated automatically here.)
 
 ## Manual Restore
 
@@ -103,13 +104,25 @@ source("R/SETUP/manual_restore.R")
 What it does:
 
 1. Reads the live deployment config and finds the production DuckDB file
-2. Creates a safety copy of the current live DB under `P:\RESEARCH SYSTEMS\RIDS_BACKUP\pre_restore_safety\`
-3. Copies the selected backup `RIDS.duckdb` into the live DB path
-4. Verifies the restored file can be opened and lists its tables
-5. Writes a `restore_manifest.txt` file in the safety folder
+2. Folds any leftover write-ahead log into the current live DB so the safety copy below captures the full current state
+3. Creates a safety copy of the current live DB under `P:\RESEARCH SYSTEMS\RIDS_BACKUP\pre_restore_safety\`
+4. Copies the selected backup `RIDS.duckdb` into the live DB path
+5. Removes any stale `RIDS.duckdb.wal` beside the live DB so the restored file is not corrupted on the next open
+6. Verifies the restored file can be opened and lists its tables
+7. Writes a `restore_manifest.txt` file in the safety folder
 
 After restore, reopen RIDS and verify the data you expected to recover.
 If the restored deployment keeps the same `shared/deployment_config.R`, saved user API keys will continue to work.
+
+## Closing RIDS
+
+On live deployments the app now shuts itself down cleanly once the last browser tab/window is closed (after a short grace period that tolerates page refreshes). When it shuts down, DuckDB checkpoints and the launcher terminal window closes on its own — users no longer need to close the terminal manually.
+
+Notes:
+
+- A brief delay between closing the browser and the terminal closing is expected (the grace period). It can be tuned with the `RIDS_SHUTDOWN_GRACE_SECONDS` environment variable.
+- This behaviour only applies when `APP_STATUS` is `live` in `shared/deployment_config.R`. In `dev`/`test` the app stays running after the browser closes.
+- **Logout** is unchanged: it returns to the login screen with the app still running, so logging back in is instant.
 
 ### 3. Prepare the Windows laptop for first use
 

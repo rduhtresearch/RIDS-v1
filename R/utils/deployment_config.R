@@ -219,6 +219,26 @@ close_duckdb_connection <- function(con) {
   invisible(TRUE)
 }
 
+# Fold any leftover write-ahead log (DB.wal) back into the main DuckDB file.
+#
+# A WAL is left on disk whenever the app process is killed before DuckDB
+# checkpoints (e.g. the launcher terminal is closed). Opening the file
+# read-write replays the WAL, and a clean shutdown (CHECKPOINT + shutdown = TRUE)
+# folds it into the main file and removes the .wal. This requires exclusive
+# access, so it errors if another process still holds the database (i.e. RIDS is
+# still running) rather than producing a stale, inconsistent file.
+duckdb_wal_path <- function(db_path) {
+  paste0(db_path, ".wal")
+}
+
+consolidate_duckdb_wal <- function(db_path) {
+  con <- open_duckdb_connection(db_path, read_only = FALSE)
+  on.exit(try(close_duckdb_connection(con), silent = TRUE), add = TRUE)
+
+  DBI::dbExecute(con, "CHECKPOINT")
+  invisible(TRUE)
+}
+
 write_deployment_config <- function(path, config) {
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
 

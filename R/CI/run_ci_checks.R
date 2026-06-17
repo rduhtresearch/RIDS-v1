@@ -117,6 +117,9 @@ run_test_result("test_step4_persistence.R", run_step4_persistence_tests)
 source(file.path(repo_dir, "R/tests/test_atomic_save_transactions.R"), local = FALSE)
 run_test_result("test_atomic_save_transactions.R", run_atomic_save_transaction_tests)
 
+source(file.path(repo_dir, "R/tests/test_wal_backup_handling.R"), local = FALSE)
+run_test_result("test_wal_backup_handling.R", run_wal_backup_handling_tests)
+
 source(file.path(repo_dir, "R/tests/test_contract_cost_source_of_truth.R"), local = FALSE)
 run_test_result("test_contract_cost_source_of_truth.R", run_contract_cost_source_of_truth_tests)
 

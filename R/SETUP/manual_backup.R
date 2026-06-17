@@ -71,6 +71,23 @@ run_manual_backup <- function() {
     fail_backup("Production DuckDB file was not found: %s", db_path)
   }
 
+  # Fold any leftover write-ahead log into the main file before copying, so the
+  # binary copy is complete and consistent with the CSV export taken below.
+  tryCatch(
+    consolidate_duckdb_wal(db_path),
+    error = function(e) {
+      fail_backup(
+        "Could not consolidate the DuckDB write-ahead log before backup. Ensure RIDS is closed and try again. Details: %s",
+        conditionMessage(e)
+      )
+    }
+  )
+
+  wal_path <- duckdb_wal_path(db_path)
+  if (file.exists(wal_path) && isTRUE(file.info(wal_path)$size > 0)) {
+    fail_backup("A non-empty write-ahead log remains after checkpoint: %s", wal_path)
+  }
+
   ensure_directory(BACKUP_ROOT, "backup root")
 
   timestamp <- format(Sys.time(), "%Y-%m-%d_%H%M%S")

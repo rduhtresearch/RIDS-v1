@@ -88,6 +88,20 @@ run_manual_restore <- function() {
     fail_restore("Production DuckDB file was not found: %s", db_path)
   }
 
+  # Fold any leftover write-ahead log into the live file before copying it, so the
+  # pre-restore safety copy below captures the full current state.
+  tryCatch(
+    consolidate_duckdb_wal(db_path),
+    error = function(e) {
+      fail_restore(
+        "Could not consolidate the live DuckDB write-ahead log before restore. Ensure RIDS is closed and try again. Details: %s",
+        conditionMessage(e)
+      )
+    }
+  )
+
+  live_wal_path <- duckdb_wal_path(db_path)
+
   source_backup_dir <- file.path(BACKUP_ROOT, selected_backup)
   source_backup_db <- file.path(source_backup_dir, "RIDS.duckdb")
   if (!file.exists(source_backup_db)) {
@@ -117,6 +131,16 @@ run_manual_restore <- function() {
   copied_backup <- file.copy(from = source_backup_db, to = db_path, overwrite = TRUE, copy.mode = TRUE)
   if (!isTRUE(copied_backup) || !file.exists(db_path)) {
     fail_restore("Failed to restore backup into the live DB path: %s", db_path)
+  }
+
+  # Remove any stale write-ahead log left beside the live DB. Left in place it
+  # would belong to the previous database file and corrupt the restored one on
+  # the next open.
+  if (file.exists(live_wal_path)) {
+    unlink(live_wal_path, force = TRUE)
+    if (file.exists(live_wal_path)) {
+      fail_restore("Failed to remove stale write-ahead log: %s", live_wal_path)
+    }
   }
 
   live_con <- tryCatch(
