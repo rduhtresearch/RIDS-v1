@@ -147,6 +147,32 @@ run_release_workflow_tests <- function() {
   .release_expect("v0.4.1 cached locally", dir.exists(file.path(local_cache_root, "releases", "v0.4.1")))
   .release_expect("v0.5.0 cached locally", dir.exists(file.path(local_cache_root, "releases", "v0.5.0")))
 
+  cat("\n[ launcher support script loads release helpers ]\n")
+  bootstrap_cache_root <- file.path(temp_root, "bootstrap-cache")
+  bootstrap_script_path <- file.path(temp_root, "bootstrap_sync.R")
+  writeLines(c(
+    paste0("source(", shQuote(file.path(temp_repo, "R", "utils", "deployment_config.R")), ")"),
+    "result <- sync_release_to_local_cache(",
+    paste0("  releases_dir = ", shQuote(releases_dir), ","),
+    "  current_release = 'v0.4.1',",
+    paste0("  local_cache_root = ", shQuote(bootstrap_cache_root)),
+    ")",
+    "cat(result$app_dir)"
+  ), bootstrap_script_path, useBytes = TRUE)
+  bootstrap_output <- suppressWarnings(system2(
+    rscript_path,
+    args = c("--vanilla", bootstrap_script_path),
+    stdout = TRUE,
+    stderr = TRUE
+  )
+  bootstrap_status <- attr(bootstrap_output, "status") %||% 0L
+
+  .release_expect("deployment_config bootstrap exits zero", identical(bootstrap_status, 0L))
+  .release_expect(
+    "deployment_config bootstrap syncs a release without pre-sourcing release management",
+    dir.exists(file.path(bootstrap_cache_root, "releases", "v0.4.1"))
+  )
+
   cat("\n[ forced republish refreshes matching cache ]\n")
   app_path <- file.path(temp_repo, "app.R")
   app_lines <- readLines(app_path, warn = FALSE)
