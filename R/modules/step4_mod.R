@@ -25,6 +25,23 @@ step4_display_mode <- function(current_step = NULL,
   "ready"
 }
 
+step4_effective_preview_arm <- function(selected_arm = NULL, templates = NULL) {
+  if (is.null(templates) || length(templates) == 0) {
+    return(NULL)
+  }
+
+  template_names <- names(templates)
+  if (is.null(template_names) || length(template_names) == 0) {
+    return(NULL)
+  }
+
+  if (!is.null(selected_arm) && length(selected_arm) == 1L && !is.na(selected_arm) && selected_arm %in% template_names) {
+    return(selected_arm)
+  }
+
+  template_names[[1]]
+}
+
 # step4_UI <- function(id) {
 #   ns <- NS(id)
 #   tagList(
@@ -1279,7 +1296,12 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         return(NULL)
       }
       
-      updateSelectInput(session, "arm_select", choices = names(tmpl))
+      updateSelectInput(
+        session,
+        "arm_select",
+        choices = names(tmpl),
+        selected = if (length(tmpl) > 0) names(tmpl)[[1]] else character(0)
+      )
       app_log_info("step4", "Template generation completed")
       
       w$hide()
@@ -1289,14 +1311,14 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     # ── Preview selected arm ──────────────────────────────────────────────────
     output$preview_table <- renderReactable({
       req(identical(current_display_mode(), "ready"))
-      req(input$arm_select)
       
       tpls <- edited_templates()
       if (is.null(tpls) || length(tpls) == 0) tpls <- templates()
-      
-      req(tpls, input$arm_select %in% names(tpls))
-      
-      df <- blank_department(tpls)[[input$arm_select]]
+
+      preview_arm <- step4_effective_preview_arm(input$arm_select, tpls)
+      req(preview_arm)
+
+      df <- blank_department(tpls)[[preview_arm]]
       
       reactable(
         df,
