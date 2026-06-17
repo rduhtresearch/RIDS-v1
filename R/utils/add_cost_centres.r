@@ -265,6 +265,12 @@ cc_build_unmatched_report <- function(resolved) {
 #' @return Same dataframe with `cost_code` populated and a summary attribute.
 add_cost_centres <- function(posting_output, study_speciality) {
   required <- c("Department", "Staff_Role", "posting_line_type_id", "activity_type")
+  join_helper_columns <- c(
+    "Department_join",
+    "activity_type_join",
+    "Staff_Role_join",
+    "posting_line_type_join"
+  )
   missing <- setdiff(required, names(posting_output))
   if (length(missing) > 0) {
     stop("add_cost_centres(): missing columns: ", paste(missing, collapse = ", "))
@@ -312,12 +318,15 @@ add_cost_centres <- function(posting_output, study_speciality) {
 
   unmatched_report <- cc_build_unmatched_report(resolved)
 
-  attr(resolved, "cost_centre_assignment_summary") <- list(
+  output <- resolved %>%
+    select(-any_of(join_helper_columns))
+
+  attr(output, "cost_centre_assignment_summary") <- list(
     total_rows = nrow(resolved),
     matched_rows = sum(!is.na(resolved$cost_code)),
     unmatched_rows = sum(is.na(resolved$cost_code))
   )
-  attr(resolved, "cost_centre_unmatched_report") <- unmatched_report
+  attr(output, "cost_centre_unmatched_report") <- unmatched_report
 
-  resolved
+  output
 }
