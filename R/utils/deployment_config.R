@@ -1,3 +1,49 @@
+`%||%` <- get0("%||%", ifnotfound = function(x, y) {
+  if (is.null(x) || length(x) == 0 || (length(x) == 1 && is.na(x))) {
+    return(y)
+  }
+
+  x
+})
+
+load_release_management_helpers <- function() {
+  target_env <- parent.frame()
+  required_helpers <- c(
+    "required_app_files",
+    "ensure_required_app_files",
+    "copy_directory_contents"
+  )
+
+  helper_exists <- function(name) exists(name, envir = target_env, inherits = TRUE)
+
+  if (all(vapply(required_helpers, helper_exists, logical(1)))) {
+    return(invisible(TRUE))
+  }
+
+  caller_ofile <- tryCatch(sys.frame(1)$ofile, error = function(e) "")
+  helper_path <- ""
+
+  if (is.character(caller_ofile) && length(caller_ofile) == 1L && nzchar(caller_ofile)) {
+    helper_path <- file.path(dirname(normalizePath(caller_ofile, winslash = "/", mustWork = TRUE)), "release_management.R")
+  }
+
+  if (nzchar(helper_path) && file.exists(helper_path)) {
+    sys.source(helper_path, envir = target_env)
+  }
+
+  if (!all(vapply(required_helpers, helper_exists, logical(1)))) {
+    stop(
+      "release_management.R helpers are unavailable. Expected to find: ",
+      paste(required_helpers, collapse = ", "),
+      if (nzchar(helper_path)) paste0(" (looked for ", helper_path, ")") else "."
+    )
+  }
+
+  invisible(TRUE)
+}
+
+load_release_management_helpers()
+
 deployment_config_candidates <- function(app_dir = getwd()) {
   env_path <- trimws(Sys.getenv("RIDS_CONFIG_PATH", ""))
   candidates <- c()
