@@ -110,6 +110,46 @@ run_step4_persistence_tests <- function() {
     )
   )
 
+  .step4_expect(
+    "preview arm keeps a valid current selection",
+    identical(
+      step4_effective_preview_arm("Arm A", original_templates),
+      "Arm A"
+    )
+  )
+
+  two_arm_templates <- c(
+    original_templates,
+    list(
+      "Arm B" = data.frame(
+        `Template Name` = "Arm B",
+        check.names = FALSE,
+        stringsAsFactors = FALSE
+      )
+    )
+  )
+
+  .step4_expect(
+    "preview arm falls back to the first template when selection is blank",
+    identical(
+      step4_effective_preview_arm("", two_arm_templates),
+      "Arm A"
+    )
+  )
+
+  .step4_expect(
+    "preview arm falls back to the first template when selection is invalid",
+    identical(
+      step4_effective_preview_arm("Missing Arm", two_arm_templates),
+      "Arm A"
+    )
+  )
+
+  .step4_expect(
+    "preview arm returns NULL when no templates exist",
+    is.null(step4_effective_preview_arm("Arm A", NULL))
+  )
+
   cat("\n", strrep("=", 60), "\n", sep = "")
   cat("PASSED: ", .step4_passed, "    FAILED: ", .step4_failed, "\n", sep = "")
   cat(strrep("=", 60), "\n", sep = "")
