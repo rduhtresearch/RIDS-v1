@@ -150,6 +150,22 @@ run_step4_persistence_tests <- function() {
     is.null(step4_effective_preview_arm("Arm A", NULL))
   )
 
+  .step4_expect(
+    "available preview arms returns all template names in order",
+    identical(
+      step4_available_preview_arms(two_arm_templates),
+      c("Arm A", "Arm B")
+    )
+  )
+
+  .step4_expect(
+    "available preview arms returns character(0) when templates are missing",
+    identical(
+      step4_available_preview_arms(NULL),
+      character(0)
+    )
+  )
+
   cat("\n", strrep("=", 60), "\n", sep = "")
   cat("PASSED: ", .step4_passed, "    FAILED: ", .step4_failed, "\n", sep = "")
   cat(strrep("=", 60), "\n", sep = "")

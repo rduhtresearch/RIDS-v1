@@ -42,6 +42,19 @@ step4_effective_preview_arm <- function(selected_arm = NULL, templates = NULL) {
   template_names[[1]]
 }
 
+step4_available_preview_arms <- function(templates = NULL) {
+  if (is.null(templates) || length(templates) == 0) {
+    return(character(0))
+  }
+
+  template_names <- names(templates)
+  if (is.null(template_names) || length(template_names) == 0) {
+    return(character(0))
+  }
+
+  template_names
+}
+
 # step4_UI <- function(id) {
 #   ns <- NS(id)
 #   tagList(
@@ -656,6 +669,13 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         validation_failure_latched = validation_failure_latched()
       )
     })
+    current_preview_templates <- reactive({
+      tpls <- edited_templates()
+      if (is.null(tpls) || length(tpls) == 0) {
+        tpls <- templates()
+      }
+      tpls
+    })
     
     # ── Edge template builder module ─────────────────────────────────────────
     edited_templates <- edgeBuilderServer(
@@ -846,7 +866,13 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       tagList(
         div(
           style = "display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;",
-          selectInput(session$ns("arm_select"), label = "Study Arm", choices = NULL, width = "200px"),
+          selectInput(
+            session$ns("arm_select"),
+            label = "Study Arm",
+            choices = step4_available_preview_arms(current_preview_templates()),
+            selected = step4_effective_preview_arm(input$arm_select, current_preview_templates()),
+            width = "200px"
+          ),
           uiOutput(session$ns("save_status"))
         ),
         reactableOutput(session$ns("preview_table")),
@@ -1295,13 +1321,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
         w$hide()
         return(NULL)
       }
-      
-      updateSelectInput(
-        session,
-        "arm_select",
-        choices = names(tmpl),
-        selected = if (length(tmpl) > 0) names(tmpl)[[1]] else character(0)
-      )
+
       app_log_info("step4", "Template generation completed")
       
       w$hide()
@@ -1312,8 +1332,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
     output$preview_table <- renderReactable({
       req(identical(current_display_mode(), "ready"))
       
-      tpls <- edited_templates()
-      if (is.null(tpls) || length(tpls) == 0) tpls <- templates()
+      tpls <- current_preview_templates()
 
       preview_arm <- step4_effective_preview_arm(input$arm_select, tpls)
       req(preview_arm)
