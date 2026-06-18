@@ -141,15 +141,18 @@ extract_mff_lookup <- function(df, sheet_name, study_value, cpms_id) {
   
   tdf <- tdf %>%
     rename(Visit_Label = Visit_Name) %>%
+    mutate(Arm_Identity = Study_Arm) %>%
     mutate(Activity_Name = NA_character_)
   
   tdf %>%
-    select(CPMS_ID, Study, Visit_Number, Study_Arm, Visit_Label, Activity_Name, ICT_Cost) %>%
+    select(CPMS_ID, Study, Visit_Number, Study_Arm, Arm_Identity, Visit_Label, Activity_Name, ICT_Cost) %>%
     mutate(activity_occurrence_id = NA_integer_,
            staff_group            = NA_integer_)
 }
 
-expand_to_visit_rows_legacy <- function(df, study_value, cpms_id, study_arm_value, visit_label_lookup = NULL) {
+expand_to_visit_rows_legacy <- function(df, study_value, cpms_id, study_arm_value,
+                                        visit_label_lookup = NULL,
+                                        arm_identity_value = study_arm_value) {
   visit_cols <- get_visit_cols(df)
   
   flags <- df[, visit_cols, drop = FALSE]
@@ -188,6 +191,7 @@ expand_to_visit_rows_legacy <- function(df, study_value, cpms_id, study_arm_valu
         Study                  = rep(study_value, n),
         Visit_Number           = rep(visit_number, n),
         Study_Arm              = rep(study_arm_value, n),
+        Arm_Identity           = rep(arm_identity_value, n),
         Visit_Label            = rep(visit_label, n),
         Activity_Name          = rep(df$Activity[i], n),
         ICT_Cost               = rep(cost_per_occ[i], n),
@@ -215,13 +219,32 @@ build_ua_ssp_lookup_from_sheet <- function(df, study_value, cpms_id, visit_label
   out <- list()
   
   df_sc <- df %>% filter(Flag == "Setup & Closedown")
-  if (nrow(df_sc) > 0) out[["SC"]] <- expand_to_visit_rows_legacy(df_sc, study_value, cpms_id, "SC", visit_label_lookup)
+  if (nrow(df_sc) > 0) {
+    out[["SC"]] <- expand_to_visit_rows_legacy(
+      df_sc, study_value, cpms_id, "SC", visit_label_lookup,
+      arm_identity_value = "SC"
+    )
+  }
   
   df_ssp <- df %>% filter(Flag == "Scheduled / Some Participants")
-  if (nrow(df_ssp) > 0) out[["SSP"]] <- expand_to_visit_rows_legacy(df_ssp, study_value, cpms_id, "SSP", visit_label_lookup)
+  if (nrow(df_ssp) > 0) {
+    out[["SSP"]] <- expand_to_visit_rows_legacy(
+      df_ssp, study_value, cpms_id, "SSP", visit_label_lookup,
+      arm_identity_value = "SSP"
+    )
+  }
   
   df_ua <- df %>% filter(Flag == "Unscheduled / Itemised Activities")
-  if (nrow(df_ua) > 0) out[["UA"]] <- expand_to_visit_rows_legacy(df_ua, study_value, cpms_id, "UA", visit_label_lookup)
+  if (nrow(df_ua) > 0) {
+    ua_identity <- unique(trimws(as.character(df_ua$SheetName)))
+    ua_identity <- ua_identity[!is.na(ua_identity) & nzchar(ua_identity)]
+    if (length(ua_identity) == 0) ua_identity <- "Unscheduled Activities"
+
+    out[["UA"]] <- expand_to_visit_rows_legacy(
+      df_ua, study_value, cpms_id, "UA", visit_label_lookup,
+      arm_identity_value = ua_identity[[1]]
+    )
+  }
   
   bind_rows(out)
 }
@@ -234,11 +257,22 @@ persist_ict_to_duckdb <- function(db_path, ict_cost_table) {
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   
   ict_cost_table$Contract_Cost <- NA_real_
+  if (!"Arm_Identity" %in% names(ict_cost_table)) {
+    ict_cost_table$Arm_Identity <- ict_cost_table$Study_Arm
+  }
   
+  if (DBI::dbExistsTable(con, "ict_costing_tbl")) {
+    existing_cols <- DBI::dbListFields(con, "ict_costing_tbl")
+    if (!"Arm_Identity" %in% existing_cols) {
+      DBI::dbExecute(con, "ALTER TABLE ict_costing_tbl ADD COLUMN Arm_Identity VARCHAR")
+    }
+  }
+
   # Reorder columns to match table schema exactly
   ict_cost_table <- ict_cost_table[, c(
     "CPMS_ID", "study_site", "scenario_id", "Study", "Visit_Number", "Study_Arm", "Visit_Label",
-    "Activity_Name", "ICT_Cost", "Contract_Cost", "activity_occurrence_id", "staff_group"
+    "Activity_Name", "ICT_Cost", "Contract_Cost", "activity_occurrence_id", "staff_group",
+    "Arm_Identity"
   )]
   
   DBI::dbWithTransaction(con, {
@@ -255,11 +289,11 @@ persist_ict_to_duckdb <- function(db_path, ict_cost_table) {
     DBI::dbExecute(con, "
       INSERT INTO ict_costing_tbl (
         CPMS_ID, study_site, scenario_id, Study, Visit_Number, Study_Arm, Visit_Label,
-        Activity_Name, ICT_Cost, Contract_Cost, activity_occurrence_id, staff_group
+        Activity_Name, ICT_Cost, Contract_Cost, activity_occurrence_id, staff_group, Arm_Identity
       )
       SELECT
         CPMS_ID, study_site, scenario_id, Study, Visit_Number, Study_Arm, Visit_Label,
-        Activity_Name, ICT_Cost, Contract_Cost, activity_occurrence_id, staff_group
+        Activity_Name, ICT_Cost, Contract_Cost, activity_occurrence_id, staff_group, Arm_Identity
       FROM stg_ict_costing_tbl
     ")
     
@@ -488,6 +522,20 @@ process_workbook <- function(input_path, archive_dir = NULL, export_path = NULL,
   df_long <- run_stage_b(df = stage_a_result$processed_sheets)
   df_long <- add_study_arm(df_long)
   UA_ARMS <- c("UA", "SC", "SSP")
+
+  df_long <- imap(df_long, function(df, sheet_nm) {
+    if (is.null(df) || nrow(df) == 0) return(df)
+
+    source_sheet <- if ("SheetName" %in% names(df)) {
+      trimws(as.character(df$SheetName))
+    } else {
+      rep(trimws(sheet_nm), nrow(df))
+    }
+    source_sheet[is.na(source_sheet) | source_sheet == ""] <- trimws(sheet_nm)
+
+    df$Arm_Identity <- ifelse(df$Study_Arm == "UA", source_sheet, as.character(df$Study_Arm))
+    as.data.frame(df)
+  })
   
   df_long <- imap(df_long, function(df, sheet_nm) {
     if (is.null(df) || nrow(df) == 0) return(df)

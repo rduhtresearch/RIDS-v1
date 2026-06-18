@@ -156,6 +156,19 @@ read_ict_workbook <- function(ict) {
             "Duplicate activities with different staff may not join correctly.")
     df$staff_group <- 1L
   }
+  if (!"Arm_Identity" %in% names(df)) {
+    warning("read_ict_workbook(): 'Arm_Identity' column missing -- defaulting to Study_Arm. ",
+            "Multi-arm unscheduled rows may not join correctly.")
+    source_sheet <- if ("SheetName" %in% names(df)) {
+      trimws(as.character(df$SheetName))
+    } else if ("sheet_name" %in% names(df)) {
+      trimws(as.character(df$sheet_name))
+    } else {
+      rep(NA_character_, nrow(df))
+    }
+    source_sheet[is.na(source_sheet) | source_sheet == ""] <- df$Study_Arm[is.na(source_sheet) | source_sheet == ""]
+    df$Arm_Identity <- ifelse(df$Study_Arm == "UA", source_sheet, df$Study_Arm)
+  }
   
   df
 }
@@ -274,17 +287,27 @@ join_ict_costs <- function(df, db_path) {
     return(df)
   }
   
-  ict <- dbGetQuery(con, "
-    SELECT CPMS_ID, study_site, scenario_id, Visit_Number, Study_Arm, Activity_Name, Contract_Cost,
-           activity_occurrence_id, staff_group
-    FROM ict_costing_tbl
-  ")
+  ict_cols <- dbListFields(con, "ict_costing_tbl")
+  ict <- dbGetQuery(con, paste(
+    "SELECT CPMS_ID, study_site, scenario_id, Visit_Number, Study_Arm, Activity_Name, Contract_Cost,",
+    if ("Arm_Identity" %in% ict_cols) "Arm_Identity," else "",
+    "activity_occurrence_id, staff_group",
+    "FROM ict_costing_tbl"
+  ))
+  if (!"Arm_Identity" %in% names(ict)) {
+    ict$Arm_Identity <- ict$Study_Arm
+  }
+  if (!"Arm_Identity" %in% names(df)) {
+    df$Arm_Identity <- df$Study_Arm
+  }
   
   # ── Row-level join: activity rows (Activity_Name NOT NULL) ─────────────────
   # staff_group is the disambiguator: same activity at the same visit with
   # different staff/costs gets a unique staff_group in pipeline_fixed.r.
   # Including it in the join key gives a clean 1:1 match.
-  ict_activity <- ict %>% filter(!is.na(Activity_Name))
+  ict_activity <- ict %>%
+    filter(!is.na(Activity_Name)) %>%
+    select(-Study_Arm)
   
   df <- df %>%
     left_join(
@@ -293,7 +316,7 @@ join_ict_costs <- function(df, db_path) {
              "study_site"  = "study_site",
              "scenario_id" = "scenario_id",
              "Visit"       = "Visit_Number",
-             "Study_Arm"   = "Study_Arm",
+             "Arm_Identity" = "Arm_Identity",
              "Activity"    = "Activity_Name",
              "staff_group" = "staff_group")
     )
@@ -302,7 +325,7 @@ join_ict_costs <- function(df, db_path) {
   # MFF rows don't have activity_occurrence_id, so join on visit-level key only.
   ict_visit <- ict %>%
     filter(is.na(Activity_Name)) %>%
-    select(CPMS_ID, study_site, scenario_id, Visit_Number, Study_Arm, Contract_Cost) %>%
+    select(CPMS_ID, study_site, scenario_id, Visit_Number, Arm_Identity, Contract_Cost) %>%
     rename(contract_cost_visit = Contract_Cost)
   
   df <- df %>%
@@ -312,7 +335,7 @@ join_ict_costs <- function(df, db_path) {
              "study_site" = "study_site",
              "scenario_id" = "scenario_id",
              "Visit"     = "Visit_Number",
-             "Study_Arm" = "Study_Arm")
+             "Arm_Identity" = "Arm_Identity")
     )
   
   # ── Coalesce: prefer activity-level, fall back to visit-level ──────────────
@@ -338,7 +361,7 @@ apply_dist_rules <- function(df, dist_rules, scenario_id,
   # Columns to carry through — intersect so missing optional cols don't error
   carry_cols <- intersect(
     names(df),
-    c("sheet_name", "Study_Arm", "Visit", "Activity", "cpms_id", "study_name",
+    c("sheet_name", "Study_Arm", "Arm_Identity", "Visit", "Activity", "cpms_id", "study_name",
       "row_id", "scenario_id", "row_category_auto", "calc_tag", "row_category",
       "is_medic", "Visit_Label", "activity_occurrence_id", "staff_group",
       "provider_org", "pi_org", "Activity.Cost", "contract_cost", "Department",
@@ -528,7 +551,7 @@ select_output_cols <- function(posting_plan) {
     select(all_of(c(
       core,
       intersect(
-        c("sheet_name", "Visit_Label", "activity_occurrence_id", "staff_group",
+        c("sheet_name", "Arm_Identity", "Visit_Label", "activity_occurrence_id", "staff_group",
           "contract_cost", "Department", "Staff.Role", "activity_type",
           "time_required"),
         names(.)

@@ -79,6 +79,7 @@ run_contract_cost_source_of_truth_tests <- function() {
       Study VARCHAR,
       Visit_Number VARCHAR,
       Study_Arm VARCHAR,
+      Arm_Identity VARCHAR,
       Visit_Label VARCHAR,
       Activity_Name VARCHAR,
       ICT_Cost DOUBLE,
@@ -98,6 +99,7 @@ run_contract_cost_source_of_truth_tests <- function() {
       Study = c("Study A", "Study A", "Study A", "Study A"),
       Visit_Number = c("VISIT - 001", "VISIT - 002", "VISIT - 001", "VISIT - 001"),
       Study_Arm = c("Treatment", "Treatment", "Treatment", "Treatment"),
+      Arm_Identity = c("Treatment", "Treatment", "Treatment", "Treatment"),
       Visit_Label = c("Screening", "Follow-up", "Screening", "Screening"),
       Activity_Name = c("Blood Test", NA_character_, "Blood Test", "Blood Test"),
       ICT_Cost = c(100.11, 200.22, 300.33, 400.44),
@@ -118,6 +120,7 @@ run_contract_cost_source_of_truth_tests <- function() {
       Study = c("Study A", "Study A"),
       Visit_Number = c("VISIT - 001", "VISIT - 001"),
       Study_Arm = c("Arm A", "SSP"),
+      Arm_Identity = c("Arm A", "SSP"),
       Visit_Label = c("Screening", "Screening"),
       Activity_Name = c("Visit Summary", "Blood Test"),
       ICT_Cost = c(100, 25),
@@ -136,6 +139,7 @@ run_contract_cost_source_of_truth_tests <- function() {
       scenario_id = "A",
       Visit = "VISIT - 001",
       Study_Arm = "Treatment",
+      Arm_Identity = "Treatment",
       Activity = "Blood Test",
       staff_group = 1L
     ),
@@ -155,6 +159,7 @@ run_contract_cost_source_of_truth_tests <- function() {
       scenario_id = "A",
       Visit = "VISIT - 002",
       Study_Arm = "Treatment",
+      Arm_Identity = "Treatment",
       Activity = "MFF Summary",
       staff_group = 1L
     ),
@@ -170,6 +175,7 @@ run_contract_cost_source_of_truth_tests <- function() {
       scenario_id = "A",
       Visit = "VISIT - 001",
       Study_Arm = "Treatment",
+      Arm_Identity = "Treatment",
       Activity = "Blood Test",
       staff_group = 1L
     ),
@@ -185,6 +191,7 @@ run_contract_cost_source_of_truth_tests <- function() {
       scenario_id = "B",
       Visit = "VISIT - 001",
       Study_Arm = "Treatment",
+      Arm_Identity = "Treatment",
       Activity = "Blood Test",
       staff_group = 1L
     ),
@@ -192,6 +199,45 @@ run_contract_cost_source_of_truth_tests <- function() {
   )
   .expect("same CPMS and site joins to the active scenario only",
           identical(joined_other_scenario$contract_cost[[1]], 444.44))
+
+  dbWriteTable(
+    con,
+    "ict_costing_tbl",
+    tibble(
+      CPMS_ID = c("CP1", "CP1"),
+      study_site = c("RDUHT", "RDUHT"),
+      scenario_id = c("A", "A"),
+      Study = c("Study A", "Study A"),
+      Visit_Number = c("VISIT - 001", "VISIT - 001"),
+      Study_Arm = c("UA", "UA"),
+      Arm_Identity = c("Arm A", "Arm B"),
+      Visit_Label = c("Screening", "Screening"),
+      Activity_Name = c("Ad hoc", "Ad hoc"),
+      ICT_Cost = c(10, 20),
+      Contract_Cost = c(11, 22),
+      activity_occurrence_id = c("UA-A-1", "UA-B-1"),
+      staff_group = c(1L, 1L)
+    ),
+    append = TRUE
+  )
+
+  joined_multi_arm_ua <- join_ict_costs(
+    tibble(
+      cpms_id = c("CP1", "CP1"),
+      study_site = c("RDUHT", "RDUHT"),
+      scenario_id = c("A", "A"),
+      Visit = c("VISIT - 001", "VISIT - 001"),
+      Study_Arm = c("UA", "UA"),
+      Arm_Identity = c("Arm A", "Arm B"),
+      Activity = c("Ad hoc", "Ad hoc"),
+      staff_group = c(1L, 1L)
+    ),
+    db_path
+  )
+  .expect("multi-arm UA rows join without fan-out",
+          nrow(joined_multi_arm_ua) == 2L)
+  .expect("multi-arm UA rows keep arm-specific saved costs",
+          identical(joined_multi_arm_ua$contract_cost, c(11, 22)))
 
   cat("\n[ persist_ict_to_duckdb ]\n")
   scoped_db_path <- tempfile(fileext = ".duckdb")
@@ -211,6 +257,7 @@ run_contract_cost_source_of_truth_tests <- function() {
       Study VARCHAR,
       Visit_Number VARCHAR,
       Study_Arm VARCHAR,
+      Arm_Identity VARCHAR,
       Visit_Label VARCHAR,
       Activity_Name VARCHAR,
       ICT_Cost DOUBLE,
@@ -412,6 +459,41 @@ run_contract_cost_source_of_truth_tests <- function() {
               "VISIT - 005 - Week 8 - ECG"
             )
           ))
+
+  cat("\n[ arm-specific UA templates ]\n")
+  adjusted_ua <- adjust_posting_lines(tibble(
+    row_id = c(1L, 2L),
+    Activity = c("Ad hoc", "Ad hoc"),
+    staff_group = c(1L, 1L),
+    scenario_id = c("A", "A"),
+    sheet_name = c("Unscheduled Activities", "Unscheduled Activities"),
+    Study_Arm = c("UA", "UA"),
+    Arm_Identity = c("Arm A", "Arm B"),
+    Visit = c("VISIT - 001", "VISIT - 001"),
+    Visit_Label = c("Screening", "Screening"),
+    posting_line_type_id = c("DIRECT", "DIRECT"),
+    posting_amount = c(11, 22),
+    contract_cost = c(11, 22),
+    adjusted_amount = c(11, 22),
+    study_name = c("Study A", "Study A"),
+    cpms_id = c("CP1", "CP1"),
+    Department = c("Dept A", "Dept B")
+  ))
+  ua_templates <- build_all_edge_templates(
+    assign_edge_keys(adjusted_ua),
+    visit_lookup = tibble(
+      Study = c("Study A", "Study A"),
+      Study_Arm = c("UA", "UA"),
+      Visit_Label = c("Screening", "Screening"),
+      Visit_Number = c("VISIT - 001", "VISIT - 001")
+    ),
+    edge_id = "EDGE-PROJ-1"
+  )
+  .expect("UA exports one template per arm identity",
+          identical(sort(names(ua_templates)), c("UA - Arm A", "UA - Arm B")))
+  .expect("each UA template keeps only its own row",
+          identical(ua_templates[["UA - Arm A"]]$`Default Cost`, 11) &&
+            identical(ua_templates[["UA - Arm B"]]$`Default Cost`, 22))
 
   cat("\n[ screening failure duplication ]\n")
   screening_input <- tibble(

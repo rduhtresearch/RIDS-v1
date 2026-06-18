@@ -263,6 +263,14 @@ visit_sort_key <- function(visit) {
   if_else(is.na(visit_num), seq_along(visit), visit_num)
 }
 
+resolve_special_template_name <- function(sheet_name, arm_identity = NULL) {
+  if_else(
+    sheet_name == "Unscheduled Activities",
+    paste0("UA - ", coalesce(arm_identity, sheet_name)),
+    sheet_name
+  )
+}
+
 build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   
   .SPECIAL_SHEETS <- c("Unscheduled Activities", "Setup & Closedown", "Pharmacy")
@@ -309,6 +317,9 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
     stop("build_all_edge_templates(): incoming data is missing 'edge_key'. ",
          "Make sure assign_edge_keys() runs before this in the pipeline.")
   }
+  if (!"Arm_Identity" %in% names(data)) {
+    data$Arm_Identity <- data$Study_Arm
+  }
   
   if (missing(visit_lookup) || is.null(visit_lookup) || nrow(visit_lookup) == 0) {
     stop("build_all_edge_templates(): 'visit_lookup' is required and must contain ",
@@ -334,14 +345,14 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
     df |>
       summarise(
         total = sum(adjusted_amount, na.rm = TRUE),
-        .by   = c(Study_Arm, sheet_name, Activity, row_id, 
+        .by   = c(Study_Arm, sheet_name, template_name, Activity, row_id, 
                   staff_group, edge_key, Department, study_name, cpms_id)
       ) |>
       mutate(
         `EDGE Project ID`                                      = edge_id,
-        `Template Name`                                        = sheet_name,
+        `Template Name`                                        = template_name,
         `Template Level (Project | Participant | ProjectSite)` = NA,
-        `Project Arm (Participant only)`                       = sheet_name,
+        `Project Arm (Participant only)`                       = template_name,
         `Project Site Name (ProjectSite only)`                 = NA,
         `Cost Item Description`                                = str_replace_all(Activity, "\\.", " "),
         `Analysis Code`                                        = edge_key,
@@ -549,7 +560,11 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   
   # ── Dispatch and return ───────────────────────────────────────────────────────
   
-  special_data <- data |> filter(sheet_name %in% .SPECIAL_SHEETS)
+  special_data <- data |>
+    filter(sheet_name %in% .SPECIAL_SHEETS) |>
+    mutate(
+      template_name = resolve_special_template_name(sheet_name, Arm_Identity)
+    )
   screening_data <- data |> filter(is_screening_failure_sheet(sheet_name))
   
   # Main data = everything that isn't a "special sheet" AND isn't custom,
@@ -569,9 +584,9 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   
   special_list <- if (nrow(special_data) > 0) {
     special_data |>
-      group_by(sheet_name) |>
+      group_by(template_name) |>
       group_map(~ .build_special(.x), .keep = TRUE) |>
-      setNames(sort(unique(special_data$sheet_name)))
+      setNames(sort(unique(special_data$template_name)))
   } else {
     list()
   }

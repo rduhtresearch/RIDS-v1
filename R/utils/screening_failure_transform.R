@@ -56,13 +56,14 @@ resolve_screening_failure_arm <- function(ict, selected_arm = NULL) {
 }
 
 is_itemised_export_row <- function(sheet_name, Study_Arm) {
-  Study_Arm %in% .ITEMISED_EDGE_ARMS | is_screening_failure_sheet(sheet_name)
+  trimws(coalesce(as.character(Study_Arm), "")) %in% .ITEMISED_EDGE_ARMS |
+    is_screening_failure_sheet(sheet_name)
 }
 
 is_itemised_adjustment_row <- function(Study_Arm) {
   # Screening Failure rows are deliberately not included here: they should be
   # scaled against the duplicated visit total, then rendered itemised later.
-  Study_Arm %in% .ITEMISED_EDGE_ARMS
+  trimws(coalesce(as.character(Study_Arm), "")) %in% .ITEMISED_EDGE_ARMS
 }
 
 resolve_edge_template_arm <- function(sheet_name, Study_Arm) {
