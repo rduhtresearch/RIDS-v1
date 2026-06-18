@@ -116,6 +116,7 @@ apply_flags_and_clean_legacy <- function(df, sheet_name, study_value, cpms_id) {
 }
 
 extract_mff_lookup <- function(df, sheet_name, study_value, cpms_id) {
+  sheet_name <- trimws(sheet_name)
   visit_cols <- get_visit_cols(df)
   
   mff_row <- df %>%
@@ -153,6 +154,8 @@ extract_mff_lookup <- function(df, sheet_name, study_value, cpms_id) {
 expand_to_visit_rows_legacy <- function(df, study_value, cpms_id, study_arm_value,
                                         visit_label_lookup = NULL,
                                         arm_identity_value = study_arm_value) {
+  study_arm_value <- trimws(as.character(study_arm_value))
+  arm_identity_value <- trimws(as.character(arm_identity_value))
   visit_cols <- get_visit_cols(df)
   
   flags <- df[, visit_cols, drop = FALSE]
@@ -533,7 +536,7 @@ process_workbook <- function(input_path, archive_dir = NULL, export_path = NULL,
     }
     source_sheet[is.na(source_sheet) | source_sheet == ""] <- trimws(sheet_nm)
 
-    df$Arm_Identity <- ifelse(df$Study_Arm == "UA", source_sheet, as.character(df$Study_Arm))
+    df$Arm_Identity <- ifelse(df$Study_Arm == "UA", source_sheet, trimws(as.character(df$Study_Arm)))
     as.data.frame(df)
   })
   

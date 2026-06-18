@@ -264,6 +264,8 @@ visit_sort_key <- function(visit) {
 }
 
 resolve_special_template_name <- function(sheet_name, arm_identity = NULL) {
+  sheet_name <- trimws(coalesce(as.character(sheet_name), ""))
+  arm_identity <- trimws(coalesce(as.character(arm_identity), ""))
   if_else(
     sheet_name == "Unscheduled Activities",
     paste0("UA - ", coalesce(arm_identity, sheet_name)),
@@ -320,6 +322,9 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
   if (!"Arm_Identity" %in% names(data)) {
     data$Arm_Identity <- data$Study_Arm
   }
+  if (!"Staff.Role" %in% names(data) && "Staff_Role" %in% names(data)) {
+    data$Staff.Role <- data$Staff_Role
+  }
   
   if (missing(visit_lookup) || is.null(visit_lookup) || nrow(visit_lookup) == 0) {
     stop("build_all_edge_templates(): 'visit_lookup' is required and must contain ",
@@ -339,6 +344,31 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
     # Screening failure EDGE defaults are temporarily forced to zero while the
     # rest of the export pipeline continues to reconcile on adjusted totals.
     total * 0
+  }
+
+  resolve_itemised_default_cost <- function(sheet_name, total) {
+    if_else(
+      is_screening_failure_sheet(sheet_name),
+      screening_failure_default_cost(total),
+      total
+    )
+  }
+
+  prefix_ssp_description <- function(description, Study_Arm) {
+    if_else(
+      trimws(coalesce(as.character(Study_Arm), "")) == "SSP",
+      paste0("[SSP] ", description),
+      description
+    )
+  }
+
+  append_staff_role_description <- function(description, staff_role) {
+    role_text <- trimws(coalesce(as.character(staff_role), ""))
+    if_else(
+      role_text == "",
+      description,
+      paste0(description, " - ", role_text)
+    )
   }
   
   .build_special <- function(df) {
@@ -371,7 +401,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
     df |>
       summarise(
         total = sum(adjusted_amount, na.rm = TRUE),
-        .by   = c(sheet_name, Visit, Visit_Label, Activity, row_id, staff_group, edge_key, study_name, cpms_id)
+        .by   = c(sheet_name, Visit, Visit_Label, Study_Arm, Activity, row_id, staff_group, edge_key, study_name, cpms_id, Staff.Role)
       ) |>
       left_join(
         visit_labels_lookup,
@@ -385,10 +415,16 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
         `Template Level (Project | Participant | ProjectSite)` = NA,
         `Project Arm (Participant only)`                       = sheet_name,
         `Project Site Name (ProjectSite only)`                 = NA,
-        `Cost Item Description`                                = paste0(
-          format_visit_prefix(Visit, Visit_Label),
-          " - ",
-          str_replace_all(Activity, "\\.", " ")
+        `Cost Item Description`                                = prefix_ssp_description(
+          append_staff_role_description(
+            paste0(
+              format_visit_prefix(Visit, Visit_Label),
+              " - ",
+              str_replace_all(Activity, "\\.", " ")
+            ),
+            `Staff.Role`
+          ),
+          Study_Arm
         ),
         `Analysis Code`                                        = edge_key,
         `Cost Category`                                        = "Research Cost",
@@ -459,29 +495,13 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
       mutate(display_visit = paste0("VISIT - ", str_pad(row_number(), 3, pad = "0"))) |>
       select(Visit, row_type, display_visit)
 
-    itemised_visit_sequence <- itemised_rows |>
-      distinct(Visit) |>
-      mutate(
-        row_type = "itemised",
-        visit_sort = visit_sort_key(Visit)
-      ) |>
-      arrange(visit_sort, Visit) |>
-      mutate(
-        display_visit = paste0(
-          "VISIT - ",
-          str_pad(row_number() + nrow(scheduled_visit_sequence), 3, pad = "0")
-        )
-      ) |>
-      select(Visit, row_type, display_visit)
-
     itemised_built <- if (nrow(itemised_rows) > 0) {
       itemised_rows |>
         summarise(
           total = sum(adjusted_amount, na.rm = TRUE),
-          .by   = c(study_name, Visit, Study_Arm, Visit_Label, Activity, row_id, staff_group, edge_key)
+          .by   = c(study_name, sheet_name, Visit, Study_Arm, Visit_Label, Activity, row_id, staff_group, edge_key)
         ) |>
         mutate(row_type = "itemised") |>
-        left_join(itemised_visit_sequence, by = c("Visit", "row_type")) |>
         left_join(
           visit_labels_lookup,
           by = c("study_name" = "Study", "Visit" = "Visit_Number")
@@ -490,16 +510,19 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
         mutate(
           Visit_Label = resolve_visit_label(Visit, Visit_Label, visit_label_lookup),
           item_text = str_replace_all(Activity, "\\.", " "),
-          visit_prefix = format_visit_prefix(display_visit, Visit_Label),
+          visit_prefix = format_visit_prefix(Visit, Visit_Label),
           `EDGE Project ID`                                      = edge_id,
           `Template Name`                                        = template_name,
           `Template Level (Project | Participant | ProjectSite)` = NA,
           `Project Arm (Participant only)`                       = NA,
           `Project Site Name (ProjectSite only)`                 = NA,
-          `Cost Item Description`                                = paste0(visit_prefix, " - ", item_text),
+          `Cost Item Description`                                = prefix_ssp_description(
+            paste0(visit_prefix, " - ", item_text),
+            Study_Arm
+          ),
           `Analysis Code`                                        = edge_key,
           `Cost Category`                                        = "Research Cost",
-          `Default Cost`                                         = screening_failure_default_cost(total),
+          `Default Cost`                                         = resolve_itemised_default_cost(sheet_name, total),
           `Currency`                                             = "GBP",
           `Department`                                           = NA,
           `Overhead Cost`                                        = NA,

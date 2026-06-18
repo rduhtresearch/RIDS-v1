@@ -67,6 +67,8 @@ is_itemised_adjustment_row <- function(Study_Arm) {
 }
 
 resolve_edge_template_arm <- function(sheet_name, Study_Arm) {
+  sheet_name <- trimws(coalesce(as.character(sheet_name), ""))
+  Study_Arm <- trimws(coalesce(as.character(Study_Arm), ""))
   if_else(is_itemised_export_row(sheet_name, Study_Arm), sheet_name, Study_Arm)
 }
 
@@ -130,10 +132,20 @@ duplicate_screening_failure_sheets <- function(ict,
   first_visit <- visit_choices$Visit[[1]]
   screening_sheet <- paste0(target_arm, .SCREENING_FAILURE_SUFFIX)
   # This is the only place Screening Failure source rows are introduced. The
-  # duplicated sheet then flows through posting, adjustment, keying, and EDGE
-  # template build like any other exportable sheet.
+  # duplicated sheet includes the selected arm's first-visit rows plus any SSP
+  # rows associated with that same visit on the same source sheet, then flows
+  # through posting, adjustment, keying, and EDGE template build like any
+  # other exportable sheet.
   screening_rows <- df |>
     dplyr::filter(Visit == first_visit)
+
+  if ("Study_Arm" %in% names(screening_rows)) {
+    screening_rows <- screening_rows |>
+      dplyr::filter(
+        trimws(coalesce(as.character(Study_Arm), "")) == trimws(target_arm) |
+          trimws(coalesce(as.character(Study_Arm), "")) == "SSP"
+      )
+  }
 
   if (nrow(screening_rows) == 0) {
     return(out)
