@@ -329,18 +329,28 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
       {
       req(shared_state$cpms_id, shared_state$study_site, shared_state$scenario_id)
 
+      ict_cols <- DBI::dbListFields(CON, "ict_costing_tbl")
+      select_cols <- c(
+        "CPMS_ID", "study_site", "scenario_id", "Study", "Visit_Number", "Study_Arm",
+        "Visit_Label", "Activity_Name", "ICT_Cost", "Contract_Cost",
+        "activity_occurrence_id", "staff_group"
+      )
+      if ("Arm_Identity" %in% ict_cols) {
+        select_cols <- append(select_cols, "Arm_Identity", after = 6L)
+      }
+
       df <- DBI::dbGetQuery(
         CON,
-        "SELECT CPMS_ID, study_site, scenario_id, Study, Visit_Number, Study_Arm,
-         Visit_Label, Activity_Name, ICT_Cost, Contract_Cost,
-         activity_occurrence_id, staff_group
-         FROM ict_costing_tbl
-         WHERE CPMS_ID = ? AND study_site = ? AND scenario_id = ?",
-         params = list(
-           as.character(shared_state$cpms_id),
-           as.character(shared_state$study_site),
-           as.character(shared_state$scenario_id)
-         )
+        paste(
+          "SELECT", paste(select_cols, collapse = ", "),
+          "FROM ict_costing_tbl",
+          "WHERE CPMS_ID = ? AND study_site = ? AND scenario_id = ?"
+        ),
+        params = list(
+          as.character(shared_state$cpms_id),
+          as.character(shared_state$study_site),
+          as.character(shared_state$scenario_id)
+        )
       )
       
       working_data$df <- step2_prepare_working_data(
@@ -515,6 +525,7 @@ step2_Server <- function(id, auth_state, shared_state, current_step) {
         rownames  = FALSE,
         columns = list(
           .step2_source_index = colDef(show = FALSE),
+          Arm_Identity = colDef(show = FALSE),
           Contract_Cost = colDef(
             name = "Contract Cost",
             headerStyle = list(

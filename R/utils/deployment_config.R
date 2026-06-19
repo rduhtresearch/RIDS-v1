@@ -120,7 +120,7 @@ read_runtime_config <- function(path) {
     ict_upload_dir = as.character(get_value("ICT_UPLOAD_DIR", "")),
     edge_output_dir = as.character(get_value("EDGE_OUTPUT_DIR", "")),
     credential_secret = as.character(get_value("CREDENTIAL_SECRET", "")),
-    app_status = as.character(get_value("APP_STATUS", "live")),
+    app_status = as.character(get_value("APP_STATUS", "dev")),
     app_log_dir = as.character(get_value("APP_LOG_DIR", file.path(getwd(), "logs"))),
     app_host = as.character(get_value("APP_HOST", "127.0.0.1")),
     app_port = suppressWarnings(as.integer(get_value("APP_PORT", 3838L))),

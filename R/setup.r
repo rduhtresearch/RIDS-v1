@@ -29,6 +29,7 @@ ict_table <- function() {
      Study                  VARCHAR,
      Visit_Number           VARCHAR,
      Study_Arm              VARCHAR,
+     Arm_Identity           VARCHAR,
      Visit_Label            VARCHAR,
      Activity_Name          VARCHAR,
      ICT_Cost               DOUBLE,
@@ -46,6 +47,9 @@ ict_table <- function() {
   }
   if (!"scenario_id" %in% ict_cols) {
     dbExecute(CON, "ALTER TABLE ict_costing_tbl ADD COLUMN scenario_id VARCHAR;")
+  }
+  if (!"Arm_Identity" %in% ict_cols) {
+    dbExecute(CON, "ALTER TABLE ict_costing_tbl ADD COLUMN Arm_Identity VARCHAR;")
   }
 }
 
@@ -821,6 +825,7 @@ posting_lines_table <- function() {
       study_site           VARCHAR,
       study_name           VARCHAR,
       Study_Arm            VARCHAR,
+      Arm_Identity         VARCHAR,
       Activity             VARCHAR,
       Visit                VARCHAR,
       posting_line_type_id VARCHAR,
@@ -857,6 +862,9 @@ posting_lines_table <- function() {
   }
   if (!"time_required" %in% posting_cols) {
     dbExecute(CON, "ALTER TABLE posting_lines ADD COLUMN time_required VARCHAR;")
+  }
+  if (!"Arm_Identity" %in% posting_cols) {
+    dbExecute(CON, "ALTER TABLE posting_lines ADD COLUMN Arm_Identity VARCHAR;")
   }
 }
 
