@@ -374,13 +374,22 @@ run_contract_cost_source_of_truth_tests <- function() {
           !("SSP" %in% names(ssp_template)) && "Treatment Arm" %in% names(ssp_template))
   .expect("main arm template shows one row per source SSP item",
           nrow(ssp_item_rows_built) == 3L)
+  .expect("main arm SSP rows are visibly prefixed",
+          all(grepl("^\\[SSP\\] ", ssp_item_rows_built$`Cost Item Description`)))
   .expect("merged SSP rows include the item names",
           all(grepl("Blood Test|ECG", ssp_item_rows_built$`Cost Item Description`)))
+  .expect("SSP rows keep their adjusted totals in Default Cost",
+          identical(
+            ssp_item_rows_built$`Default Cost`,
+            c(25, 35, 40)
+          ))
   .expect("SSP rows do not duplicate the visit prefix",
           !any(grepl("^VISIT - 001 - VISIT - 001", ssp_item_rows_built$`Cost Item Description`)))
   .expect("non-SSP scheduled rows still roll up by visit",
           nrow(scheduled_rows_built) == 1L &&
             identical(scheduled_rows_built$`Default Cost`[[1]], 200))
+  .expect("non-SSP scheduled rows do not get the SSP prefix",
+          !any(grepl("^\\[SSP\\] ", scheduled_rows_built$`Cost Item Description`)))
   .expect("main arm rows do not repeat a visit-only label",
           identical(
             build_edge_template_main(tibble(
@@ -448,15 +457,15 @@ run_contract_cost_source_of_truth_tests <- function() {
     ),
     edge_id = "EDGE-PROJ-1"
   )
-  .expect("scheduled main visits are renumbered densely before SSP rows",
+  .expect("SSP rows use their actual visit numbers in the parent arm template",
           identical(
             renumber_template[["Treatment Arm"]]$`Cost Item Description`,
             c(
               "VISIT - 001 - Screening",
               "VISIT - 002 - Week 12",
               "VISIT - 003 - Week 48",
-              "VISIT - 004 - Week 4 - Questionnaire",
-              "VISIT - 005 - Week 8 - ECG"
+              "[SSP] VISIT - 002 - Week 4 - Questionnaire",
+              "[SSP] VISIT - 003 - Week 8 - ECG"
             )
           ))
 
@@ -644,55 +653,62 @@ run_contract_cost_source_of_truth_tests <- function() {
           ))
 
   screening_enabled <- tibble(
-    row_id = c(1L, 1L, 2L, 2L, 3L, 3L, 4L, 5L),
-    scenario_id = rep("A", 8),
-    row_category_auto = rep("BASELINE", 8),
+    row_id = c(1L, 1L, 2L, 2L, 3L, 3L, 4L, 5L, 6L, 7L),
+    scenario_id = rep("A", 10),
+    row_category_auto = rep("BASELINE", 10),
     calc_tag = NA_character_,
-    row_category = rep("BASELINE", 8),
-    is_medic = rep(FALSE, 8),
-    cpms_id = rep("CP1", 8),
-    study_site = rep("RDUHT", 8),
-    study_name = rep("Study A", 8),
-    Study_Arm = c("Arm A", "Arm A", "Arm A", "Arm A", "Arm A", "Arm A", "Arm A", "Arm B"),
+    row_category = rep("BASELINE", 10),
+    is_medic = rep(FALSE, 10),
+    cpms_id = rep("CP1", 10),
+    study_site = rep("RDUHT", 10),
+    study_name = rep("Study A", 10),
+    Study_Arm = c("Arm A", "Arm A", "Arm A", "Arm A", "Arm A", "Arm A", "Arm A", "Arm B", "SSP", "SSP"),
     Activity = c(
       "Informed consent", "Informed consent",
       "Informed consent", "Informed consent",
       "Demographics", "Demographics",
-      "Visit Summary", "Visit Summary"
+      "Visit Summary", "Visit Summary",
+      "Blood Test", "Blood Test"
     ),
     Visit = c(
       "VISIT - 001", "VISIT - 001",
       "VISIT - 001", "VISIT - 001",
       "VISIT - 001", "VISIT - 001",
-      "VISIT - 002", "VISIT - 001"
+      "VISIT - 002", "VISIT - 001",
+      "VISIT - 001", "VISIT - 001"
     ),
     posting_line_type_id = c(
       "DIRECT", "CAPACITY_RD",
       "DIRECT", "CAPACITY_RD",
       "DIRECT", "CAPACITY_RD",
+      "DIRECT", "DIRECT",
       "DIRECT", "DIRECT"
     ),
-    posting_amount = c(80, 20, 40, 10, 30, 20, 120, 200),
-    destination_bucket = rep("DEST_RD", 8),
-    destination_entity = rep("R&D", 8),
+    posting_amount = c(80, 20, 40, 10, 30, 20, 120, 200, 25, 25),
+    destination_bucket = rep("DEST_RD", 10),
+    destination_entity = rep("R&D", 10),
     cost_code = NA_character_,
     sheet_name = c(
       rep("Arm A - SCREENING FAILURE", 6),
       "Arm A",
-      "Arm B"
+      "Arm B",
+      "Arm A",
+      "Arm A - SCREENING FAILURE"
     ),
     Visit_Label = c(
       rep("Screening", 6),
       "Follow-up",
-      "Baseline"
+      "Baseline",
+      "Screening",
+      "Screening"
     ),
-    activity_occurrence_id = c("AO1", "AO1", "AO2", "AO2", "AO3", "AO3", "AO4", "BO1"),
-    staff_group = rep(1L, 8),
-    contract_cost = c(rep(2032, 6), 120, 200),
-    Department = c(rep("Dept A", 7), "Dept B"),
-    Staff.Role = c(rep("Nurse", 7), "Coordinator"),
-    activity_type = rep("Visit", 8),
-    time_required = c(30, 30, 35, 35, 15, 15, 45, 40)
+    activity_occurrence_id = c("AO1", "AO1", "AO2", "AO2", "AO3", "AO3", "AO4", "BO1", "SO1", "SO1"),
+    staff_group = c(rep(1L, 8), 2L, 2L),
+    contract_cost = c(rep(2032, 6), 120, 200, 25, 25),
+    Department = c(rep("Dept A", 7), "Dept B", "Lab", "Lab"),
+    Staff.Role = c(rep("Nurse", 7), "Coordinator", "Medical Staff", "Medical Staff"),
+    activity_type = c(rep("Visit", 8), "Investigation", "Investigation"),
+    time_required = c(30, 30, 35, 35, 15, 15, 45, 40, 20, 20)
   )
   screening_enabled <- prepare_screening_failure_posting_input(screening_enabled)
 
@@ -715,29 +731,40 @@ run_contract_cost_source_of_truth_tests <- function() {
           "Arm A - SCREENING FAILURE" %in% names(screening_templates))
   .expect("later arms do not get screening failure templates",
           !"Arm B - SCREENING FAILURE" %in% names(screening_templates))
-  .expect("ordinary main-arm templates still roll up by visit",
+  .expect("ordinary main-arm templates still roll up scheduled rows by visit",
           identical(
-            screening_templates[["Arm A"]]$`Cost Item Description`,
+            screening_templates[["Arm A"]]$`Cost Item Description`[1],
             "VISIT - 001 - Follow-up"
           ))
+  .expect("parent arm templates still retain their original SSP rows",
+          "[SSP] VISIT - 001 - Screening - Blood Test" %in%
+            screening_templates[["Arm A"]]$`Cost Item Description`)
   .expect("screening templates are itemised per duplicated source row",
           identical(
             screening_templates[["Arm A - SCREENING FAILURE"]]$`Cost Item Description`,
             c(
-              "VISIT - 001 - Screening - Informed consent",
-              "VISIT - 001 - Screening - Informed consent",
-              "VISIT - 001 - Screening - Demographics"
+              "VISIT - 001 - Screening - Informed consent - Nurse",
+              "VISIT - 001 - Screening - Informed consent - Nurse",
+              "VISIT - 001 - Screening - Demographics - Nurse",
+              "[SSP] VISIT - 001 - Screening - Blood Test - Medical Staff"
             )
           ))
+  .expect("screening templates include matching SSP rows for the duplicated visit",
+          "[SSP] VISIT - 001 - Screening - Blood Test - Medical Staff" %in%
+            screening_templates[["Arm A - SCREENING FAILURE"]]$`Cost Item Description`)
+  .expect("screening-failure rows append staff role when present",
+          all(grepl(" - Nurse$| - Medical Staff$", screening_templates[["Arm A - SCREENING FAILURE"]]$`Cost Item Description`)))
+  .expect("non-SSP screening-failure rows do not get the SSP prefix",
+          !any(grepl("^\\[SSP\\] ", screening_templates[["Arm A - SCREENING FAILURE"]]$`Cost Item Description`[1:3])))
   .expect("repeated screening source rows remain separate in the template",
           sum(
             screening_templates[["Arm A - SCREENING FAILURE"]]$`Cost Item Description` ==
-              "VISIT - 001 - Screening - Informed consent"
+              "VISIT - 001 - Screening - Informed consent - Nurse"
           ) == 2L)
   .expect("screening failure rows get distinct itemised EDGE keys",
           dplyr::n_distinct(
             screening_keyed$edge_key[screening_keyed$sheet_name == "Arm A - SCREENING FAILURE"]
-          ) == 3L)
+          ) == 4L)
   expected_screening_costs <- screening_keyed %>%
     filter(sheet_name == "Arm A - SCREENING FAILURE") %>%
     summarise(total = sum(adjusted_amount), .by = c(row_id, Activity, staff_group, edge_key)) %>%

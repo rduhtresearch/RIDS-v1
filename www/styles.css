@@ -553,3 +553,26 @@ body.sidebar-collapse .rids-sidebar-nav .nav-sidebar .nav-link > svg {
   background: #ffffff;
   transition: transform 0.18s ease;
 }
+
+.edge-builder-template-section + .edge-builder-template-section {
+  margin-top: 1rem;
+}
+
+.edge-builder-template-section-title {
+  margin-bottom: 0.35rem;
+  color: var(--sidebar-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.edge-builder-template-section-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.edge-builder-template-link {
+  padding: 0.2rem 0;
+}
