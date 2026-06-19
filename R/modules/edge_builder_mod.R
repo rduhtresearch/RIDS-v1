@@ -106,6 +106,28 @@ edge_builder_validate_new_name <- function(raw, existing_names) {
   list(valid = TRUE, msg = NULL, name = trimmed)
 }
 
+edge_builder_template_section <- function(template_name) {
+  nm <- trimws(coalesce(as.character(template_name), ""))
+
+  if (startsWith(nm, "UA - ")) {
+    return("Unscheduled")
+  }
+
+  if (identical(nm, "Setup & Closedown")) {
+    return("Set-up")
+  }
+
+  if (endsWith(nm, " - SCREENING FAILURE")) {
+    return("Screening Failure")
+  }
+
+  "Main Arms"
+}
+
+edge_builder_section_order <- function() {
+  c("Unscheduled", "Set-up", "Main Arms", "Screening Failure")
+}
+
 edge_builder_move_rows <- function(templates, source, target, indices) {
   moving <- templates[[source]][indices, , drop = FALSE]
   moving$`Template Name` <- target
@@ -275,18 +297,38 @@ edgeBuilderServer <- function(id, edge_templates) {
     # ── Left pane ────────────────────────────────────────────────────────────
     output$template_list <- renderUI({
       req(rv$templates)
-      
+
+      template_names <- names(rv$templates)
+      grouped_names <- split(
+        template_names,
+        vapply(template_names, edge_builder_template_section, character(1))
+      )
+
       tagList(
-        lapply(names(rv$templates), function(nm) {
-          n_rows <- nrow(rv$templates[[nm]])
-          label  <- paste0(nm, " (", n_rows, " rows)")
-          if (!is_movable(nm)) label <- paste0(label, " — read-only")
-          
+        lapply(edge_builder_section_order(), function(section_name) {
+          section_templates <- grouped_names[[section_name]]
+          if (is.null(section_templates) || length(section_templates) == 0) {
+            return(NULL)
+          }
+
           div(
-            style = "padding: 0.4rem 0;",
-            actionLink(
-              inputId = ns(paste0("sel_", nm)),
-              label   = label
+            class = "edge-builder-template-section",
+            div(class = "edge-builder-template-section-title", section_name),
+            div(
+              class = "edge-builder-template-section-items",
+              lapply(section_templates, function(nm) {
+                n_rows <- nrow(rv$templates[[nm]])
+                label  <- paste0(nm, " (", n_rows, " rows)")
+                if (!is_movable(nm)) label <- paste0(label, " — read-only")
+
+                div(
+                  class = "edge-builder-template-link",
+                  actionLink(
+                    inputId = ns(paste0("sel_", nm)),
+                    label   = label
+                  )
+                )
+              })
             )
           )
         })
