@@ -77,7 +77,11 @@ suppressPackageStartupMessages({
   errs <- list()
 
   if (.ca_is_blank(input_list$modal_arm))      errs$modal_arm      <- "Required"
-  if (.ca_is_blank(input_list$modal_activity)) errs$modal_activity <- "Required"
+  if (.ca_is_blank(input_list$modal_activity) &&
+      .ca_is_blank(input_list$modal_activity_free)) {
+    errs$modal_activity <- "Required"
+    errs$modal_activity_free <- "Required"
+  }
 
   mode <- input_list$modal_mode %||% .CA_MODE_LEFT_VALUE
 
@@ -425,7 +429,7 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
     touched <- reactiveValues()
     
     .all_field_ids <- function() {
-      c("modal_arm", "modal_activity",
+      c("modal_arm", "modal_activity", "modal_activity_free",
         "single_cc", "single_amt",
         paste0("base_cc_",  seq_len(.CA_BASELINE_SLOTS)),
         paste0("base_amt_", seq_len(.CA_BASELINE_SLOTS)))
@@ -470,10 +474,21 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
                                    width = "100%"),
                        uiOutput(ns("hint_modal_arm"))),
                 column(6,
-                       selectInput(ns("modal_activity"), label = NULL,
-                                   choices = c("Choose activity…" = "", activity_choices),
-                                   width = "100%"),
-                       uiOutput(ns("hint_modal_activity")))
+                       selectInput(
+                         ns("modal_activity"),
+                         label = NULL,
+                         choices = c("Choose activity from list…" = "", activity_choices),
+                         width = "100%"
+                       ),
+                       uiOutput(ns("hint_modal_activity")),
+                       textInput(
+                         ns("modal_activity_free"),
+                         label = NULL,
+                         value = "",
+                         placeholder = "Or type a new activity here",
+                         width = "100%"
+                       ),
+                       uiOutput(ns("hint_modal_activity_free")))
               )
           ),
           
@@ -629,7 +644,8 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
     }
     
     .render_hint("modal_arm",      "Choose a study arm")
-    .render_hint("modal_activity", "Choose an activity")
+    .render_hint("modal_activity", "Choose an activity from the list")
+    .render_hint("modal_activity_free", "Or type a new activity")
     .render_hint("single_cc",      "Enter the cost centre")
     .render_hint("single_amt",     "Amount in GBP")
     for (i in seq_len(.CA_BASELINE_SLOTS)) {
@@ -667,13 +683,18 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
         )
       }
       
+      activity_name <- trimws(as.character(input$modal_activity_free %||% ""))
+      if (!nzchar(activity_name)) {
+        activity_name <- trimws(as.character(input$modal_activity %||% ""))
+      }
+
       activity <- list(
         cpms_id     = as.character(shared_state$cpms_id),
         study_site  = as.character(shared_state$study_site %||% NA_character_),
         study_name  = as.character(shared_state$study_name  %||% NA_character_),
         scenario_id = as.character(shared_state$scenario_id %||% NA_character_),
         Study_Arm   = input$modal_arm,
-        Activity    = input$modal_activity,
+        Activity    = activity_name,
         mode        = mode,
         rows        = rows_df,
         created_by  = if (is.null(auth_state$user_id)) NA_integer_

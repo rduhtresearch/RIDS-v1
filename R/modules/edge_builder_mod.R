@@ -99,8 +99,39 @@ edge_builder_validate_new_name <- function(raw, existing_names) {
   list(valid = TRUE, msg = NULL, name = trimmed)
 }
 
-edge_builder_template_section <- function(template_name) {
+edge_builder_is_custom_template <- function(template_name, original_templates) {
   nm <- trimws(coalesce(as.character(template_name), ""))
+  if (!nzchar(nm) || is.null(original_templates)) {
+    return(FALSE)
+  }
+  !(nm %in% names(original_templates))
+}
+
+edge_builder_template_is_edited <- function(template_name, current_templates, original_templates) {
+  nm <- trimws(coalesce(as.character(template_name), ""))
+  if (!nzchar(nm) || is.null(current_templates) || !(nm %in% names(current_templates))) {
+    return(FALSE)
+  }
+
+  current_df <- current_templates[[nm]]
+
+  if (edge_builder_is_custom_template(nm, original_templates)) {
+    return(nrow(current_df) > 0)
+  }
+
+  if (is.null(original_templates) || !(nm %in% names(original_templates))) {
+    return(FALSE)
+  }
+
+  !identical(current_df, original_templates[[nm]])
+}
+
+edge_builder_template_section <- function(template_name, custom_templates = character(0)) {
+  nm <- trimws(coalesce(as.character(template_name), ""))
+
+  if (nm %in% custom_templates) {
+    return("Custom")
+  }
 
   if (startsWith(nm, "UA - ")) {
     return("Unscheduled")
@@ -118,7 +149,7 @@ edge_builder_template_section <- function(template_name) {
 }
 
 edge_builder_section_order <- function() {
-  c("Unscheduled", "Set-up", "Main Arms", "Screening Failure")
+  c("Unscheduled", "Set-up", "Main Arms", "Screening Failure", "Custom")
 }
 
 edge_builder_move_rows <- function(templates, source, target, indices) {
@@ -291,9 +322,17 @@ edgeBuilderServer <- function(id, edge_templates) {
       req(rv$templates)
 
       template_names <- names(rv$templates)
+      custom_templates <- template_names[
+        vapply(template_names, edge_builder_is_custom_template, logical(1), original_templates = rv$original)
+      ]
       grouped_names <- split(
         template_names,
-        vapply(template_names, edge_builder_template_section, character(1))
+        vapply(
+          template_names,
+          edge_builder_template_section,
+          character(1),
+          custom_templates = custom_templates
+        )
       )
 
       tagList(
@@ -311,12 +350,27 @@ edgeBuilderServer <- function(id, edge_templates) {
               lapply(section_templates, function(nm) {
                 n_rows <- nrow(rv$templates[[nm]])
                 label  <- paste0(nm, " (", n_rows, " rows)")
+                is_edited <- edge_builder_template_is_edited(
+                  template_name = nm,
+                  current_templates = rv$templates,
+                  original_templates = rv$original
+                )
 
                 div(
                   class = "edge-builder-template-link",
                   actionLink(
                     inputId = ns(paste0("sel_", nm)),
-                    label   = label
+                    label   = tags$span(
+                      class = "edge-builder-template-label",
+                      tags$span(class = "edge-builder-template-text", label),
+                      if (is_edited) {
+                        tags$i(
+                          class = "fas fa-pen edge-builder-template-icon",
+                          title = "Edited template",
+                          `aria-label` = "Edited template"
+                        )
+                      }
+                    )
                   )
                 )
               })

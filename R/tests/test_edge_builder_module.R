@@ -99,6 +99,47 @@ run_edge_builder_module_tests <- function() {
   .expect("unique new template names are accepted",
           isTRUE(valid_check$valid) && identical(valid_check$name, "Safety Follow-up"))
 
+  cat("\n[ custom and edited template status ]\n")
+  original_templates <- list(
+    `Main Arm` = main_tpl,
+    `Setup & Closedown` = setup_tpl
+  )
+  current_templates <- original_templates
+  current_templates$`Main Arm` <- bind_rows(
+    current_templates$`Main Arm`,
+    tibble(
+      `Template Name` = "Main Arm",
+      Department = "Ops",
+      `Cost Item Description` = "VISIT - 003",
+      `Default Cost` = 30,
+      `Analysis Code` = "CODE-3"
+    )
+  )
+  current_templates$test <- tibble(
+    `Template Name` = "test",
+    Department = "Ops",
+    `Cost Item Description` = "Custom row",
+    `Default Cost` = 20,
+    `Analysis Code` = "CODE-X"
+  )
+
+  custom_templates <- names(current_templates)[
+    vapply(names(current_templates), edge_builder_is_custom_template, logical(1), original_templates = original_templates)
+  ]
+
+  .expect("new templates are classified as custom",
+          identical(custom_templates, "test"))
+  .expect("custom templates are grouped into the Custom section",
+          identical(edge_builder_template_section("test", custom_templates = custom_templates), "Custom"))
+  .expect("edited original templates are flagged as edited",
+          edge_builder_template_is_edited("Main Arm", current_templates, original_templates))
+  .expect("new custom templates with rows are flagged as edited",
+          edge_builder_template_is_edited("test", current_templates, original_templates))
+  .expect("unchanged original templates are not flagged as edited",
+          !edge_builder_template_is_edited("Setup & Closedown", current_templates, original_templates))
+  .expect("original template sections are unchanged when edited",
+          identical(edge_builder_template_section("Main Arm", custom_templates = custom_templates), "Main Arms"))
+
   cat("\n[ department filter and A/Z sorting ]\n")
   filter_tpl <- .edge_template(
     "Setup & Closedown",
@@ -207,6 +248,8 @@ run_edge_builder_module_tests <- function() {
           identical(moved_templates$`Safety Follow-up`$`Template Name`, "Safety Follow-up"))
   .expect("moved row preserves its original description",
           identical(moved_templates$`Safety Follow-up`$`Cost Item Description`, "Set-up visit"))
+  .expect("moved rows preserve their analysis code",
+          identical(moved_templates$`Safety Follow-up`$`Analysis Code`, "CODE-1"))
 
   cat("\n", strrep("=", 60), "\n", sep = "")
   cat("PASSED: ", .passed, "    FAILED: ", .failed, "\n", sep = "")

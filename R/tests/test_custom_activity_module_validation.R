@@ -30,6 +30,7 @@ suppressPackageStartupMessages({
   x <- list(
     modal_arm      = "Treatment",
     modal_activity = "External consultancy",
+    modal_activity_free = "",
     modal_mode     = mode,
     single_cc      = "RDH-FIN-001",
     single_amt     = 100,
@@ -74,6 +75,18 @@ run_custom_activity_module_validation_tests <- function() {
   single_negative$single_amt <- -0.01
   errs_single_negative <- .ca_validate_modal_inputs(single_negative)
   .expect("single mode rejects negative amount", identical(errs_single_negative$single_amt, "Must be >= 0"))
+
+  single_free_text <- .base_modal_input(.CA_MODE_LEFT_VALUE)
+  single_free_text$modal_activity <- ""
+  single_free_text$modal_activity_free <- "Bespoke patient liaison service"
+  errs_single_free_text <- .ca_validate_modal_inputs(single_free_text)
+  .expect("single mode accepts typed activity not in reference list", length(errs_single_free_text) == 0L)
+
+  single_blank_activity <- .base_modal_input(.CA_MODE_LEFT_VALUE)
+  single_blank_activity$modal_activity <- "   "
+  single_blank_activity$modal_activity_free <- "   "
+  errs_single_blank_activity <- .ca_validate_modal_inputs(single_blank_activity)
+  .expect("blank typed activity is still rejected", identical(errs_single_blank_activity$modal_activity, "Required"))
 
   cat("\n[ baseline validation ]\n")
   baseline_zero <- .base_modal_input(.CA_MODE_RIGHT_VALUE)

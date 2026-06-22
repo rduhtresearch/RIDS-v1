@@ -28,6 +28,17 @@ suppressPackageStartupMessages({
   library(purrr)
 })
 
+.resolve_pipeline_study_name <- function(pipeline_rows) {
+  if (!"study_name" %in% names(pipeline_rows) || nrow(pipeline_rows) == 0) {
+    return(NULL)
+  }
+
+  vals <- unique(trimws(as.character(pipeline_rows$study_name)))
+  vals <- vals[!is.na(vals) & nzchar(vals)]
+
+  if (length(vals) == 1L) vals[[1L]] else NULL
+}
+
 #' Merge user-entered custom activities into the pipeline's posting lines.
 #'
 #' This is the function step4_Server calls. Idempotent in the sense that
@@ -69,6 +80,8 @@ apply_custom_activities <- function(pipeline_rows, shared_state, con = CON) {
   if (nrow(customs) == 0) {
     return(pipeline_rows)
   }
+
+  pipeline_study_name <- .resolve_pipeline_study_name(pipeline_rows)
   
   # ── 3. Mint edge keys (one per activity, shared across its slots) ─────────
   customs_keyed <- ca_assign_edge_keys(customs)
@@ -99,7 +112,10 @@ apply_custom_activities <- function(pipeline_rows, shared_state, con = CON) {
       context <- list(
         cpms_id     = unique(g$cpms_id),
         study_site  = unique(g$study_site)  %||% shared_state$study_site %||% NA_character_,
-        study_name  = unique(g$study_name)  %||% shared_state$study_name  %||% NA_character_,
+        study_name  = pipeline_study_name %||%
+                      unique(g$study_name) %||%
+                      shared_state$study_name %||%
+                      NA_character_,
         scenario_id = unique(g$scenario_id) %||% shared_state$scenario_id %||% NA_character_,
         Study_Arm   = unique(g$Study_Arm),
         Activity    = unique(g$Activity),

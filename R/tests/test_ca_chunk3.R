@@ -248,6 +248,22 @@ run_ca_chunk3_tests <- function() {
           all(is.na(out3$row_category_auto[out3$destination_bucket == "CUSTOM"])))
   .expect("pipeline rows untouched",
           all(out3$destination_bucket[out3$sheet_name == "Pharmacy"] == "DEST_PROVIDER"))
+  .expect("custom rows inherit pipeline study_name",
+          all(out3$study_name[out3$destination_bucket == "CUSTOM"] == "POLARIS-AD"))
+
+  cat("\n[ apply_custom_activities: pipeline study_name overrides saved custom name ]\n")
+  pipeline_mismatch <- .make_pipeline_rows(3) |>
+    mutate(study_name = "ICT Derived Study")
+  shared_mismatch <- .make_shared_state()
+  shared_mismatch$study_name <- "User Entered Study"
+  ca_insert(.make_single_activity(cpms_id = "70000", activity_name = "Mismatch check") |>
+              utils::modifyList(list(study_name = "Saved Custom Study")))
+  out_mismatch <- apply_custom_activities(
+    pipeline_mismatch |> mutate(cpms_id = "70000"),
+    shared_mismatch |> utils::modifyList(list(cpms_id = "70000"))
+  )
+  .expect("custom rows prefer ICT-derived pipeline study_name",
+          all(out_mismatch$study_name[out_mismatch$destination_bucket == "CUSTOM"] == "ICT Derived Study"))
   
   cat("\n[ apply_custom_activities: isolates by cpms_id ]\n")
   # Insert a custom activity for a DIFFERENT study, then run for original study.

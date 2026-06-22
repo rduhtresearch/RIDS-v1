@@ -576,3 +576,14 @@ body.sidebar-collapse .rids-sidebar-nav .nav-sidebar .nav-link > svg {
 .edge-builder-template-link {
   padding: 0.2rem 0;
 }
+
+.edge-builder-template-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.edge-builder-template-icon {
+  color: var(--sidebar-muted);
+  font-size: 0.8rem;
+}
