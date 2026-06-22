@@ -486,7 +486,8 @@ run_contract_cost_source_of_truth_tests <- function() {
     adjusted_amount = c(11, 22),
     study_name = c("Study A", "Study A"),
     cpms_id = c("CP1", "CP1"),
-    Department = c("Dept A", "Dept B")
+    Department = c("Dept A", "Dept B"),
+    Staff.Role = c("Nurse", "Coordinator")
   ))
   ua_templates <- build_all_edge_templates(
     assign_edge_keys(adjusted_ua),
@@ -503,6 +504,22 @@ run_contract_cost_source_of_truth_tests <- function() {
   .expect("each UA template keeps only its own row",
           identical(ua_templates[["UA - Arm A"]]$`Default Cost`, 11) &&
             identical(ua_templates[["UA - Arm B"]]$`Default Cost`, 22))
+  .expect("UA descriptions append staff role when present",
+          identical(
+            c(
+              ua_templates[["UA - Arm A"]]$`Cost Item Description`,
+              ua_templates[["UA - Arm B"]]$`Cost Item Description`
+            ),
+            c("Ad hoc - Nurse", "Ad hoc - Coordinator")
+          ))
+  .expect("UA templates preserve department values",
+          identical(
+            c(
+              ua_templates[["UA - Arm A"]]$Department,
+              ua_templates[["UA - Arm B"]]$Department
+            ),
+            c("Dept A", "Dept B")
+          ))
 
   cat("\n[ screening failure duplication ]\n")
   screening_input <- tibble(
