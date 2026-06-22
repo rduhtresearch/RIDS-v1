@@ -59,23 +59,23 @@ run_edge_builder_module_tests <- function() {
     `Main Arm` = main_tpl,
     `Setup & Closedown` = setup_tpl
   )
-  movable <- edge_builder_compute_movable(tpls)
+  movable <- names(tpls)
 
-  .expect("Setup & Closedown is movable with departmental rows after trimming",
-          identical(movable, "Setup & Closedown"))
-  .expect("Main Arm stays read-only when Department is blank/NA only",
-          !("Main Arm" %in% movable))
+  .expect("all templates are treated as movable",
+          identical(movable, c("Main Arm", "Setup & Closedown")))
+  .expect("main arm templates are now movable even with blank departments",
+          edge_builder_can_move_from("Main Arm", movable))
 
   cat("\n[ move target choices ]\n")
-  only_new_choice <- edge_builder_move_target_choices(
-    active = "Setup & Closedown",
+  main_arm_choices <- edge_builder_move_target_choices(
+    active = "Main Arm",
     movable = movable,
     new_sentinel = new_sentinel
   )
-  .expect("single movable source still offers named tab creation",
-          identical(unname(only_new_choice), new_sentinel))
-  .expect("single movable source labels the choice as + New template...",
-          identical(names(only_new_choice), "+ New template..."))
+  .expect("previously locked templates now offer existing targets and new-template creation",
+          identical(unname(main_arm_choices), c("Setup & Closedown", new_sentinel)))
+  .expect("previously locked templates show the new-template label",
+          identical(names(main_arm_choices), c("Setup & Closedown", "+ New template...")))
 
   multi_choices <- edge_builder_move_target_choices(
     active = "Setup & Closedown",
@@ -86,14 +86,6 @@ run_edge_builder_module_tests <- function() {
           identical(unname(multi_choices), c("Pharmacy", new_sentinel)))
   .expect("existing target keeps its own label alongside new-template option",
           identical(names(multi_choices), c("Pharmacy", "+ New template...")))
-
-  readonly_choices <- edge_builder_move_target_choices(
-    active = "Main Arm",
-    movable = movable,
-    new_sentinel = new_sentinel
-  )
-  .expect("read-only source does not offer any move targets",
-          length(readonly_choices) == 0L)
 
   cat("\n[ new name validation ]\n")
   dup_check <- edge_builder_validate_new_name("Main Arm", names(tpls))

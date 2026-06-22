@@ -74,13 +74,6 @@ edge_builder_filter_sort_rows <- function(df,
   df
 }
 
-edge_builder_compute_movable <- function(tpls) {
-  names(tpls)[vapply(tpls, function(d) {
-    if (!"Department" %in% names(d)) return(FALSE)
-    any(!is.na(edge_builder_normalize_department(d$Department)))
-  }, logical(1))]
-}
-
 edge_builder_can_move_from <- function(active, movable) {
   !is.null(active) && nzchar(active) && active %in% movable
 }
@@ -157,7 +150,6 @@ edgeBuilderUI <- function(id) {
       column(
         width = 8,
         h4(textOutput(ns("active_title"))),
-        uiOutput(ns("readonly_notice")),
         div(
           style = paste(
             "display: flex;",
@@ -262,7 +254,7 @@ edgeBuilderServer <- function(id, edge_templates) {
       
       rv$original  <- tpls
       rv$templates <- tpls
-      rv$movable   <- edge_builder_compute_movable(tpls)
+      rv$movable   <- names(tpls)
       
       if (is.null(rv$active) || !(rv$active %in% names(tpls))) {
         rv$active <- if (length(rv$movable) > 0) rv$movable[1] else names(tpls)[1]
@@ -319,7 +311,6 @@ edgeBuilderServer <- function(id, edge_templates) {
               lapply(section_templates, function(nm) {
                 n_rows <- nrow(rv$templates[[nm]])
                 label  <- paste0(nm, " (", n_rows, " rows)")
-                if (!is_movable(nm)) label <- paste0(label, " — read-only")
 
                 div(
                   class = "edge-builder-template-link",
@@ -351,24 +342,6 @@ edgeBuilderServer <- function(id, edge_templates) {
     output$active_title <- renderText({
       req(rv$active)
       rv$active
-    })
-    
-    output$readonly_notice <- renderUI({
-      req(rv$active)
-      if (is_movable(rv$active)) return(NULL)
-      
-      div(
-        style = paste(
-          "background: #fff8e1;",
-          "border-left: 3px solid #f0ad4e;",
-          "padding: 0.5rem 0.75rem;",
-          "margin: 0.5rem 0;",
-          "font-size: 0.85rem;",
-          "color: #6b5400;",
-          "border-radius: 3px;"
-        ),
-        "Main arm template — combined activities, read-only in this view"
-      )
     })
     
     # ── Reactable ────────────────────────────────────────────────────────────
@@ -462,13 +435,13 @@ edgeBuilderServer <- function(id, edge_templates) {
     })
     
     observe({
-      can_move <- length(rv$selected) > 0 && is_movable(rv$active)
+      can_move <- length(rv$selected) > 0
       shinyjs::toggleState("move_selected", condition = can_move)
     })
     
     # ── Move modal ───────────────────────────────────────────────────────────
     observeEvent(input$move_selected, {
-      req(length(rv$selected) > 0, rv$active, rv$templates, is_movable(rv$active))
+      req(length(rv$selected) > 0, rv$active, rv$templates)
       
       target_choices <- edge_builder_move_target_choices(
         active = rv$active,
