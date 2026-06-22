@@ -376,7 +376,7 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
       summarise(
         total = sum(adjusted_amount, na.rm = TRUE),
         .by   = c(Study_Arm, sheet_name, template_name, Activity, row_id, 
-                  staff_group, edge_key, Department, study_name, cpms_id)
+                  staff_group, edge_key, Department, study_name, cpms_id, Staff.Role)
       ) |>
       mutate(
         `EDGE Project ID`                                      = edge_id,
@@ -384,7 +384,14 @@ build_all_edge_templates <- function(data, visit_lookup, edge_id) {
         `Template Level (Project | Participant | ProjectSite)` = NA,
         `Project Arm (Participant only)`                       = template_name,
         `Project Site Name (ProjectSite only)`                 = NA,
-        `Cost Item Description`                                = str_replace_all(Activity, "\\.", " "),
+        `Cost Item Description`                                = if_else(
+          sheet_name == "Unscheduled Activities",
+          append_staff_role_description(
+            str_replace_all(Activity, "\\.", " "),
+            `Staff.Role`
+          ),
+          str_replace_all(Activity, "\\.", " ")
+        ),
         `Analysis Code`                                        = edge_key,
         `Cost Category`                                        = "Research Cost",
         `Default Cost`                                         = total,
