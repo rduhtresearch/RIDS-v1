@@ -59,23 +59,23 @@ run_edge_builder_module_tests <- function() {
     `Main Arm` = main_tpl,
     `Setup & Closedown` = setup_tpl
   )
-  movable <- edge_builder_compute_movable(tpls)
+  movable <- names(tpls)
 
-  .expect("Setup & Closedown is movable with departmental rows after trimming",
-          identical(movable, "Setup & Closedown"))
-  .expect("Main Arm stays read-only when Department is blank/NA only",
-          !("Main Arm" %in% movable))
+  .expect("all templates are treated as movable",
+          identical(movable, c("Main Arm", "Setup & Closedown")))
+  .expect("main arm templates are now movable even with blank departments",
+          edge_builder_can_move_from("Main Arm", movable))
 
   cat("\n[ move target choices ]\n")
-  only_new_choice <- edge_builder_move_target_choices(
-    active = "Setup & Closedown",
+  main_arm_choices <- edge_builder_move_target_choices(
+    active = "Main Arm",
     movable = movable,
     new_sentinel = new_sentinel
   )
-  .expect("single movable source still offers named tab creation",
-          identical(unname(only_new_choice), new_sentinel))
-  .expect("single movable source labels the choice as + New template...",
-          identical(names(only_new_choice), "+ New template..."))
+  .expect("previously locked templates now offer existing targets and new-template creation",
+          identical(unname(main_arm_choices), c("Setup & Closedown", new_sentinel)))
+  .expect("previously locked templates show the new-template label",
+          identical(names(main_arm_choices), c("Setup & Closedown", "+ New template...")))
 
   multi_choices <- edge_builder_move_target_choices(
     active = "Setup & Closedown",
@@ -86,14 +86,6 @@ run_edge_builder_module_tests <- function() {
           identical(unname(multi_choices), c("Pharmacy", new_sentinel)))
   .expect("existing target keeps its own label alongside new-template option",
           identical(names(multi_choices), c("Pharmacy", "+ New template...")))
-
-  readonly_choices <- edge_builder_move_target_choices(
-    active = "Main Arm",
-    movable = movable,
-    new_sentinel = new_sentinel
-  )
-  .expect("read-only source does not offer any move targets",
-          length(readonly_choices) == 0L)
 
   cat("\n[ new name validation ]\n")
   dup_check <- edge_builder_validate_new_name("Main Arm", names(tpls))
@@ -106,6 +98,47 @@ run_edge_builder_module_tests <- function() {
           identical(blank_check$msg, "Required") && !blank_check$valid)
   .expect("unique new template names are accepted",
           isTRUE(valid_check$valid) && identical(valid_check$name, "Safety Follow-up"))
+
+  cat("\n[ custom and edited template status ]\n")
+  original_templates <- list(
+    `Main Arm` = main_tpl,
+    `Setup & Closedown` = setup_tpl
+  )
+  current_templates <- original_templates
+  current_templates$`Main Arm` <- bind_rows(
+    current_templates$`Main Arm`,
+    tibble(
+      `Template Name` = "Main Arm",
+      Department = "Ops",
+      `Cost Item Description` = "VISIT - 003",
+      `Default Cost` = 30,
+      `Analysis Code` = "CODE-3"
+    )
+  )
+  current_templates$test <- tibble(
+    `Template Name` = "test",
+    Department = "Ops",
+    `Cost Item Description` = "Custom row",
+    `Default Cost` = 20,
+    `Analysis Code` = "CODE-X"
+  )
+
+  custom_templates <- names(current_templates)[
+    vapply(names(current_templates), edge_builder_is_custom_template, logical(1), original_templates = original_templates)
+  ]
+
+  .expect("new templates are classified as custom",
+          identical(custom_templates, "test"))
+  .expect("custom templates are grouped into the Custom section",
+          identical(edge_builder_template_section("test", custom_templates = custom_templates), "Custom"))
+  .expect("edited original templates are flagged as edited",
+          edge_builder_template_is_edited("Main Arm", current_templates, original_templates))
+  .expect("new custom templates with rows are flagged as edited",
+          edge_builder_template_is_edited("test", current_templates, original_templates))
+  .expect("unchanged original templates are not flagged as edited",
+          !edge_builder_template_is_edited("Setup & Closedown", current_templates, original_templates))
+  .expect("original template sections are unchanged when edited",
+          identical(edge_builder_template_section("Main Arm", custom_templates = custom_templates), "Main Arms"))
 
   cat("\n[ department filter and A/Z sorting ]\n")
   filter_tpl <- .edge_template(
@@ -215,6 +248,8 @@ run_edge_builder_module_tests <- function() {
           identical(moved_templates$`Safety Follow-up`$`Template Name`, "Safety Follow-up"))
   .expect("moved row preserves its original description",
           identical(moved_templates$`Safety Follow-up`$`Cost Item Description`, "Set-up visit"))
+  .expect("moved rows preserve their analysis code",
+          identical(moved_templates$`Safety Follow-up`$`Analysis Code`, "CODE-1"))
 
   cat("\n", strrep("=", 60), "\n", sep = "")
   cat("PASSED: ", .passed, "    FAILED: ", .failed, "\n", sep = "")

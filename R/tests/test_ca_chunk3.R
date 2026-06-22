@@ -218,6 +218,10 @@ run_ca_chunk3_tests <- function() {
   .expect("custom row has CA-0001 edge_key", "CA-0001" %in% out2$edge_key)
   .expect("custom row has CUSTOM bucket",    "CUSTOM" %in% out2$destination_bucket)
   .expect("custom row sum = 1000",           sum(out2$adjusted_amount[out2$destination_bucket == "CUSTOM"]) == 1000)
+  .expect("single custom row writes code to cost_code",
+          identical(out2$cost_code[out2$edge_key == "CA-0001"], "RDH-FIN-001"))
+  .expect("single custom row leaves destination_entity blank",
+          is.na(out2$destination_entity[out2$edge_key == "CA-0001"]))
   .expect("pipeline rows preserved",
           all(c("EDGE-0001","EDGE-0002","EDGE-0003") %in% out2$edge_key))
   .expect("column count unchanged",          ncol(out2) == ncol(pipeline))
@@ -233,6 +237,10 @@ run_ca_chunk3_tests <- function() {
           sum(out3$adjusted_amount[out3$edge_key == "CA-0002"]) == 1000)
   .expect("total custom = 2000",
           sum(out3$adjusted_amount[out3$destination_bucket == "CUSTOM"]) == 2000)
+  .expect("baseline custom rows write codes to cost_code",
+          identical(out3$cost_code[out3$edge_key == "CA-0002"], c("CC1", "CC2", "CC3", "CC4", "CC5")))
+  .expect("baseline custom rows leave destination_entity blank",
+          all(is.na(out3$destination_entity[out3$edge_key == "CA-0002"])))
   
   cat("\n[ apply_custom_activities: row_ids don't collide ]\n")
   custom_row_ids <- out3$row_id[out3$destination_bucket == "CUSTOM"]
@@ -248,6 +256,22 @@ run_ca_chunk3_tests <- function() {
           all(is.na(out3$row_category_auto[out3$destination_bucket == "CUSTOM"])))
   .expect("pipeline rows untouched",
           all(out3$destination_bucket[out3$sheet_name == "Pharmacy"] == "DEST_PROVIDER"))
+  .expect("custom rows inherit pipeline study_name",
+          all(out3$study_name[out3$destination_bucket == "CUSTOM"] == "POLARIS-AD"))
+
+  cat("\n[ apply_custom_activities: pipeline study_name overrides saved custom name ]\n")
+  pipeline_mismatch <- .make_pipeline_rows(3) |>
+    mutate(study_name = "ICT Derived Study")
+  shared_mismatch <- .make_shared_state()
+  shared_mismatch$study_name <- "User Entered Study"
+  ca_insert(.make_single_activity(cpms_id = "70000", activity_name = "Mismatch check") |>
+              utils::modifyList(list(study_name = "Saved Custom Study")))
+  out_mismatch <- apply_custom_activities(
+    pipeline_mismatch |> mutate(cpms_id = "70000"),
+    shared_mismatch |> utils::modifyList(list(cpms_id = "70000"))
+  )
+  .expect("custom rows prefer ICT-derived pipeline study_name",
+          all(out_mismatch$study_name[out_mismatch$destination_bucket == "CUSTOM"] == "ICT Derived Study"))
   
   cat("\n[ apply_custom_activities: isolates by cpms_id ]\n")
   # Insert a custom activity for a DIFFERENT study, then run for original study.

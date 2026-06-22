@@ -165,14 +165,28 @@ run_ca_query_tests <- function() {
   rows3 <- dbGetQuery(CON, "SELECT * FROM addon_custom_activities WHERE custom_activity_id = ?",
                       params = list(id3))
   .expect("inserts with NULL created_by",    is.na(rows3$created_by[1]))
+
+  cat("\n[ free-text activity persistence ]\n")
+  id4 <- ca_insert(.make_single_activity(
+    cost_centre = "CC-FREE",
+    amount = 75,
+    activity_name = "Bespoke patient liaison service"
+  ))
+  rows4 <- dbGetQuery(CON, "SELECT * FROM addon_custom_activities WHERE custom_activity_id = ?",
+                      params = list(id4))
+  .expect("free-text Activity is persisted unchanged",
+          rows4$Activity[1] == "Bespoke patient liaison service")
   
   # ── Sequential ID generation ───────────────────────────────────────────────
   cat("\n[ sequential id allocation ]\n")
   .expect("third id is 59904-003 (not -002 again)",
           id3 == "59904-003")
-  
+
+  .expect("free-text insert becomes 59904-004",
+          id4 == "59904-004")
+
   next_id <- ca_next_id("59904", "RDUHT", "A")
-  .expect("next id is 59904-004",  next_id == "59904-004")
+  .expect("next id is 59904-005",  next_id == "59904-005")
   
   # Different cpms_id starts fresh at 001
   id_other <- ca_insert(.make_single_activity(cpms_id = "12345"))
@@ -182,7 +196,7 @@ run_ca_query_tests <- function() {
   cat("\n[ ca_load ]\n")
   loaded <- ca_load("59904", "RDUHT", "A")
   .expect("loads tibble",                    is_tibble(loaded))
-  .expect("loads 7 rows (1+5+1)",            nrow(loaded) == 7L)
+  .expect("loads 8 rows (1+5+1+1)",          nrow(loaded) == 8L)
   .expect("ordered by custom_activity_id then slot_num",
           identical(loaded$custom_activity_id,
                     sort(loaded$custom_activity_id)))
@@ -208,12 +222,12 @@ run_ca_query_tests <- function() {
   
   # ── ca_next_id after delete ────────────────────────────────────────────────
   cat("\n[ ca_next_id after delete ]\n")
-  # We've deleted -002 but -003 still exists. Max suffix is 3, so next is 4.
+  # We've deleted -002 but -004 still exists. Max suffix is 4, so next is 5.
   # This is intentional: ids are not reused. If you delete -002, the next id
-  # is still -004, not -002.
+  # is still -005, not -002.
   next_after_delete <- ca_next_id("59904", "RDUHT", "A")
   .expect("next_id continues past deleted (not reused)",
-          next_after_delete == "59904-004")
+          next_after_delete == "59904-005")
   
   # ── ca_clear_run ───────────────────────────────────────────────────────────
   cat("\n[ ca_clear_run ]\n")

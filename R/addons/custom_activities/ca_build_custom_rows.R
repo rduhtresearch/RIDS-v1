@@ -127,8 +127,8 @@ suppressPackageStartupMessages({
 #'
 #' @return Tibble of posting_lines-schema rows. All non-essential columns
 #'         are NA of the correct type. `adjusted_amount` and `posting_amount`
-#'         both carry the user-entered amount. `destination_entity` is the
-#'         user-entered cost centre. All rows share `edge_key`.
+#'         both carry the user-entered amount. The user-entered custom code is
+#'         written to `cost_code`. All rows share `edge_key`.
 ca_build_custom_rows <- function(rows, mode, context) {
   
   .ca_validate_inputs(rows, mode, context)
@@ -154,8 +154,8 @@ ca_build_custom_rows <- function(rows, mode, context) {
     is_medic             = NA,                          # logical NA
     posting_line_type_id = posting_line_types,
     destination_bucket   = .CA_DEST_BUCKET,
-    destination_entity   = as.character(rows$cost_centre),
-    cost_code            = NA_character_,
+    destination_entity   = NA_character_,
+    cost_code            = as.character(rows$cost_centre),
     
     # ── Pipeline-schema bookkeeping (required for .build_special grouping) ──
     sheet_name           = .CA_SHEET_NAME,

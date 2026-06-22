@@ -74,13 +74,6 @@ edge_builder_filter_sort_rows <- function(df,
   df
 }
 
-edge_builder_compute_movable <- function(tpls) {
-  names(tpls)[vapply(tpls, function(d) {
-    if (!"Department" %in% names(d)) return(FALSE)
-    any(!is.na(edge_builder_normalize_department(d$Department)))
-  }, logical(1))]
-}
-
 edge_builder_can_move_from <- function(active, movable) {
   !is.null(active) && nzchar(active) && active %in% movable
 }
@@ -106,8 +99,39 @@ edge_builder_validate_new_name <- function(raw, existing_names) {
   list(valid = TRUE, msg = NULL, name = trimmed)
 }
 
-edge_builder_template_section <- function(template_name) {
+edge_builder_is_custom_template <- function(template_name, original_templates) {
   nm <- trimws(coalesce(as.character(template_name), ""))
+  if (!nzchar(nm) || is.null(original_templates)) {
+    return(FALSE)
+  }
+  !(nm %in% names(original_templates))
+}
+
+edge_builder_template_is_edited <- function(template_name, current_templates, original_templates) {
+  nm <- trimws(coalesce(as.character(template_name), ""))
+  if (!nzchar(nm) || is.null(current_templates) || !(nm %in% names(current_templates))) {
+    return(FALSE)
+  }
+
+  current_df <- current_templates[[nm]]
+
+  if (edge_builder_is_custom_template(nm, original_templates)) {
+    return(nrow(current_df) > 0)
+  }
+
+  if (is.null(original_templates) || !(nm %in% names(original_templates))) {
+    return(FALSE)
+  }
+
+  !identical(current_df, original_templates[[nm]])
+}
+
+edge_builder_template_section <- function(template_name, custom_templates = character(0)) {
+  nm <- trimws(coalesce(as.character(template_name), ""))
+
+  if (nm %in% custom_templates) {
+    return("Custom")
+  }
 
   if (startsWith(nm, "UA - ")) {
     return("Unscheduled")
@@ -125,7 +149,7 @@ edge_builder_template_section <- function(template_name) {
 }
 
 edge_builder_section_order <- function() {
-  c("Unscheduled", "Set-up", "Main Arms", "Screening Failure")
+  c("Unscheduled", "Set-up", "Main Arms", "Screening Failure", "Custom")
 }
 
 edge_builder_move_rows <- function(templates, source, target, indices) {
@@ -157,7 +181,6 @@ edgeBuilderUI <- function(id) {
       column(
         width = 8,
         h4(textOutput(ns("active_title"))),
-        uiOutput(ns("readonly_notice")),
         div(
           style = paste(
             "display: flex;",
@@ -262,7 +285,7 @@ edgeBuilderServer <- function(id, edge_templates) {
       
       rv$original  <- tpls
       rv$templates <- tpls
-      rv$movable   <- edge_builder_compute_movable(tpls)
+      rv$movable   <- names(tpls)
       
       if (is.null(rv$active) || !(rv$active %in% names(tpls))) {
         rv$active <- if (length(rv$movable) > 0) rv$movable[1] else names(tpls)[1]
@@ -299,9 +322,17 @@ edgeBuilderServer <- function(id, edge_templates) {
       req(rv$templates)
 
       template_names <- names(rv$templates)
+      custom_templates <- template_names[
+        vapply(template_names, edge_builder_is_custom_template, logical(1), original_templates = rv$original)
+      ]
       grouped_names <- split(
         template_names,
-        vapply(template_names, edge_builder_template_section, character(1))
+        vapply(
+          template_names,
+          edge_builder_template_section,
+          character(1),
+          custom_templates = custom_templates
+        )
       )
 
       tagList(
@@ -319,13 +350,27 @@ edgeBuilderServer <- function(id, edge_templates) {
               lapply(section_templates, function(nm) {
                 n_rows <- nrow(rv$templates[[nm]])
                 label  <- paste0(nm, " (", n_rows, " rows)")
-                if (!is_movable(nm)) label <- paste0(label, " — read-only")
+                is_edited <- edge_builder_template_is_edited(
+                  template_name = nm,
+                  current_templates = rv$templates,
+                  original_templates = rv$original
+                )
 
                 div(
                   class = "edge-builder-template-link",
                   actionLink(
                     inputId = ns(paste0("sel_", nm)),
-                    label   = label
+                    label   = tags$span(
+                      class = "edge-builder-template-label",
+                      tags$span(class = "edge-builder-template-text", label),
+                      if (is_edited) {
+                        tags$i(
+                          class = "fas fa-pen edge-builder-template-icon",
+                          title = "Edited template",
+                          `aria-label` = "Edited template"
+                        )
+                      }
+                    )
                   )
                 )
               })
@@ -351,24 +396,6 @@ edgeBuilderServer <- function(id, edge_templates) {
     output$active_title <- renderText({
       req(rv$active)
       rv$active
-    })
-    
-    output$readonly_notice <- renderUI({
-      req(rv$active)
-      if (is_movable(rv$active)) return(NULL)
-      
-      div(
-        style = paste(
-          "background: #fff8e1;",
-          "border-left: 3px solid #f0ad4e;",
-          "padding: 0.5rem 0.75rem;",
-          "margin: 0.5rem 0;",
-          "font-size: 0.85rem;",
-          "color: #6b5400;",
-          "border-radius: 3px;"
-        ),
-        "Main arm template — combined activities, read-only in this view"
-      )
     })
     
     # ── Reactable ────────────────────────────────────────────────────────────
@@ -462,13 +489,13 @@ edgeBuilderServer <- function(id, edge_templates) {
     })
     
     observe({
-      can_move <- length(rv$selected) > 0 && is_movable(rv$active)
+      can_move <- length(rv$selected) > 0
       shinyjs::toggleState("move_selected", condition = can_move)
     })
     
     # ── Move modal ───────────────────────────────────────────────────────────
     observeEvent(input$move_selected, {
-      req(length(rv$selected) > 0, rv$active, rv$templates, is_movable(rv$active))
+      req(length(rv$selected) > 0, rv$active, rv$templates)
       
       target_choices <- edge_builder_move_target_choices(
         active = rv$active,
