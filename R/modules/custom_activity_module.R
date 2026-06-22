@@ -73,6 +73,18 @@ suppressPackageStartupMessages({
   is.null(x) || length(x) == 0L || !nzchar(trimws(as.character(x[[1L]]) %||% ""))
 }
 
+.ca_commit_rebuild_needed <- function(has_pending_changes) {
+  isTRUE(has_pending_changes)
+}
+
+.ca_effective_activity_name <- function(input_list) {
+  activity_name <- trimws(as.character(input_list$modal_activity_free %||% ""))
+  if (!nzchar(activity_name)) {
+    activity_name <- trimws(as.character(input_list$modal_activity %||% ""))
+  }
+  activity_name
+}
+
 .ca_validate_modal_inputs <- function(input_list) {
   errs <- list()
 
@@ -242,11 +254,52 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
     
     ns <- session$ns
     
-    invalidation_tick <- reactiveVal(0L)
-    .bump <- function() invalidation_tick(invalidation_tick() + 1L)
+    panel_refresh_tick <- reactiveVal(0L)
+    rebuild_tick <- reactiveVal(0L)
+    modal_dirty <- reactiveVal(FALSE)
+    touch_tracking_enabled <- reactiveVal(TRUE)
+    .bump_panel <- function() panel_refresh_tick(panel_refresh_tick() + 1L)
+    .bump_rebuild <- function() rebuild_tick(rebuild_tick() + 1L)
+    .bump_all <- function() {
+      .bump_panel()
+      .bump_rebuild()
+    }
+    .reset_touch_state <- function() {
+      for (fid in .all_field_ids()) touched[[fid]] <- FALSE
+    }
+    .reset_modal_form <- function() {
+      touch_tracking_enabled(FALSE)
+      updateSelectInput(session, "modal_arm", selected = "")
+      updateSelectInput(session, "modal_activity", selected = "")
+      updateTextInput(session, "modal_activity_free", value = "")
+      updateTextInput(session, "single_cc", value = "")
+      updateNumericInput(session, "single_amt", value = NA_real_)
+      for (i in seq_len(.CA_BASELINE_SLOTS)) {
+        updateTextInput(session, paste0("base_cc_", i), value = "")
+        updateNumericInput(session, paste0("base_amt_", i), value = NA_real_)
+      }
+      .reset_touch_state()
+      session$onFlushed(function() touch_tracking_enabled(TRUE), once = TRUE)
+      shinyjs::runjs(sprintf(
+        "var cb = document.getElementById('%s');
+         if (cb) {
+           cb.checked = false;
+           cb.dispatchEvent(new Event('change'));
+         }
+         Shiny.setInputValue('%s', '%s', {priority: 'event'});
+         setTimeout(function() {
+           var el = document.getElementById('%s');
+           if (el) el.focus();
+         }, 0);",
+        ns("modal_mode_switch"),
+        ns("modal_mode"),
+        .CA_MODE_LEFT_VALUE,
+        ns("modal_arm")
+      ))
+    }
     
     customs <- reactive({
-      invalidation_tick()
+      panel_refresh_tick()
       req(shared_state$cpms_id)
       req(shared_state$study_site, shared_state$scenario_id)
       ca_load(
@@ -269,7 +322,8 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
           study_site = as.character(shared_state$study_site %||% NA_character_),
           scenario_id = as.character(shared_state$scenario_id %||% NA_character_)
         )
-        .bump()
+        modal_dirty(FALSE)
+        .bump_all()
       }
     }, ignoreNULL = TRUE, ignoreInit = TRUE)
     
@@ -414,7 +468,8 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
         # Perform the delete
         tryCatch({
           ca_delete(latest_clicked)
-          .bump()
+          modal_dirty(FALSE)
+          .bump_all()
           expanded_id(NULL)
           showNotification(paste0("Deleted ", latest_clicked),
                            type = "message", duration = 3)
@@ -436,12 +491,14 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
     }
     
     observeEvent(input$open_add, {
-      for (fid in .all_field_ids()) touched[[fid]] <- FALSE
+      .reset_touch_state()
     })
     
     lapply(.all_field_ids(), function(fid) {
       observeEvent(input[[fid]], {
-        touched[[fid]] <- TRUE
+        if (isTRUE(touch_tracking_enabled())) {
+          touched[[fid]] <- TRUE
+        }
       }, ignoreInit = TRUE, ignoreNULL = FALSE)
     })
     
@@ -456,7 +513,7 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
         size  = "l",
         easyClose = FALSE,
         footer = tagList(
-          actionButton(ns("modal_cancel"), "Cancel"),
+          actionButton(ns("modal_done"), "Done"),
           actionButton(ns("modal_submit"), "Add activity",
                        class = "btn-primary", icon = icon("check"))
         ),
@@ -658,7 +715,13 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
       shinyjs::toggleState("modal_submit", condition = length(errs) == 0)
     })
     
-    observeEvent(input$modal_cancel, removeModal())
+    observeEvent(input$modal_done, {
+      if (.ca_commit_rebuild_needed(modal_dirty())) {
+        .bump_rebuild()
+        modal_dirty(FALSE)
+      }
+      removeModal()
+    })
     
     # ── Submit ──────────────────────────────────────────────────────────────
     observeEvent(input$modal_submit, {
@@ -683,10 +746,7 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
         )
       }
       
-      activity_name <- trimws(as.character(input$modal_activity_free %||% ""))
-      if (!nzchar(activity_name)) {
-        activity_name <- trimws(as.character(input$modal_activity %||% ""))
-      }
+      activity_name <- .ca_effective_activity_name(reactiveValuesToList(input))
 
       activity <- list(
         cpms_id     = as.character(shared_state$cpms_id),
@@ -710,15 +770,17 @@ customActivityServer <- function(id, auth_state, shared_state, study_arm_choices
       })
       
       if (!is.null(new_id)) {
-        removeModal()
-        .bump()
+        modal_dirty(TRUE)
+        .bump_panel()
+        .reset_modal_form()
         showNotification(paste0("Added custom activity ", new_id),
                          type = "message", duration = 4)
       }
     })
     
     list(
-      invalidation_signal = reactive(invalidation_tick())
+      panel_refresh_signal = reactive(panel_refresh_tick()),
+      rebuild_signal = reactive(rebuild_tick())
     )
   })
 }

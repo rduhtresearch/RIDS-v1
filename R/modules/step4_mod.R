@@ -948,7 +948,7 @@ step4_Server <- function(id, auth_state, shared_state, current_step) {
       # Re-trigger when customs change so templates rebuild with/without them.
       # First entry: signal is 0; addon wipes; signal bumps to 1 → this observer
       # runs once more with customs cleared (no-op effectively).
-      custom_activity_handles$invalidation_signal()
+      custom_activity_handles$rebuild_signal()
       if (isTRUE(validation_failure_latched())) {
         return(invisible(NULL))
       }

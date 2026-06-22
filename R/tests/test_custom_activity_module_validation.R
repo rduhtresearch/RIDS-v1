@@ -59,6 +59,28 @@ run_custom_activity_module_validation_tests <- function() {
   .expect("blank string becomes NA", is.na(.ca_as_scalar_num("   ")))
   .expect("NA numeric stays NA", is.na(.ca_as_scalar_num(NA_real_)))
 
+  cat("\n[ activity helpers ]\n")
+  .expect("effective activity prefers free text when present",
+          identical(
+            .ca_effective_activity_name(list(
+              modal_activity = "Patient Expenses",
+              modal_activity_free = "Bespoke patient liaison service"
+            )),
+            "Bespoke patient liaison service"
+          ))
+  .expect("effective activity falls back to dropdown choice",
+          identical(
+            .ca_effective_activity_name(list(
+              modal_activity = "Patient Expenses",
+              modal_activity_free = "   "
+            )),
+            "Patient Expenses"
+          ))
+  .expect("commit rebuild helper is false without pending changes",
+          identical(.ca_commit_rebuild_needed(FALSE), FALSE))
+  .expect("commit rebuild helper is true with pending changes",
+          identical(.ca_commit_rebuild_needed(TRUE), TRUE))
+
   cat("\n[ single_cc validation ]\n")
   single_zero <- .base_modal_input(.CA_MODE_LEFT_VALUE)
   single_zero$single_amt <- 0
