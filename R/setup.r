@@ -71,6 +71,7 @@ meta_table <- function() {
       saved_file_path   VARCHAR,
       speciality_id     INTEGER,
       edge_zip_path     VARCHAR,
+      mff_rate          DOUBLE DEFAULT 1.08,
       mff_split_enabled BOOLEAN DEFAULT FALSE,
       mff_split_pct     DOUBLE DEFAULT 0
     );"
@@ -94,6 +95,9 @@ meta_table <- function() {
   if (!"edge_zip_path" %in% meta_cols) {
     dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN edge_zip_path VARCHAR;")
   }
+  if (!"mff_rate" %in% meta_cols) {
+    dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN mff_rate DOUBLE DEFAULT 1.08;")
+  }
   if (!"mff_split_enabled" %in% meta_cols) {
     dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN mff_split_enabled BOOLEAN DEFAULT FALSE;")
   }
@@ -101,6 +105,7 @@ meta_table <- function() {
     dbExecute(CON, "ALTER TABLE meta_data ADD COLUMN mff_split_pct DOUBLE DEFAULT 0;")
   }
 
+  dbExecute(CON, "UPDATE meta_data SET mff_rate = 1.08 WHERE mff_rate IS NULL;")
   dbExecute(CON, "UPDATE meta_data SET mff_split_enabled = FALSE WHERE mff_split_enabled IS NULL;")
   dbExecute(CON, "UPDATE meta_data SET mff_split_pct = 0 WHERE mff_split_pct IS NULL;")
 

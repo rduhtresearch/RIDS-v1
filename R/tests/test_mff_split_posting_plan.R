@@ -216,6 +216,20 @@ run_mff_split_posting_plan_tests <- function() {
   .expect("enabled split destination entity resolves",
           identical(enabled$destination_entity[enabled$posting_line_type_id == "MFF_SPLIT_NEW_CC"], "MFF_SPLIT_CC"))
 
+  cat("\n[ custom mff rate ]\n")
+  custom_rate <- .evaluate_row(
+    .make_row(),
+    rules,
+    scenario_id = "A",
+    mff_rate = 1.12,
+    mff_split_enabled = FALSE,
+    mff_split_pct = 0
+  )
+  .expect("custom MFF rate changes direct amount",
+          .near(custom_rate$posting_amount[custom_rate$posting_line_type_id == "DIRECT"], 59.36))
+  .expect("custom MFF rate changes overall total",
+          .near(sum(custom_rate$posting_amount), 112.784))
+
   cat("\n[ rule-shape coverage ]\n")
   investigation <- .evaluate_row(
     .make_row(activity_type = "Investigation"),

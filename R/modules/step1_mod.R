@@ -15,6 +15,13 @@ step1_UI <- function(id) {
       selectInput(ns('speciality_id'), 'Clinical speciality', choices = NULL),
       textInput(ns('edge_id'), 'EDGE ID'),
       textInput(ns('study_name'), 'Study Name'),
+      numericInput(
+        ns("mff_rate"),
+        "MFF multiplier",
+        value = 1.08,
+        min = 0,
+        step = 0.01
+      ),
       checkboxInput(
         ns("mff_split_enabled"),
         "Use new MFF split",
@@ -63,6 +70,7 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       updateSelectInput(session, "speciality_id", selected = "")
       updateTextInput(session, "edge_id", value = "")
       updateTextInput(session, "study_name", value = "")
+      updateNumericInput(session, "mff_rate", value = 1.08)
       updateCheckboxInput(session, "mff_split_enabled", value = TRUE)
       updateNumericInput(session, "mff_split_pct", value = 0.25)
       updateCheckboxInput(session, "include_screening_failure", value = FALSE)
@@ -80,6 +88,7 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       feedbackDanger("upload", show = FALSE)
       feedbackDanger("study_site", show = FALSE)
       feedbackDanger("speciality_id", show = FALSE)
+      feedbackDanger("mff_rate", show = FALSE)
       feedbackDanger("mff_split_pct", show = FALSE)
     }
 
@@ -210,6 +219,11 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       feedbackDanger("speciality_id", show = is.null(input$speciality_id) || input$speciality_id == "",
                      text = "Required")
       feedbackDanger(
+        "mff_rate",
+        show = is.null(input$mff_rate) || is.na(input$mff_rate) || input$mff_rate <= 0,
+        text = "Enter a value greater than 0"
+      )
+      feedbackDanger(
         "mff_split_pct",
         show = isTRUE(input$mff_split_enabled) &&
           (is.null(input$mff_split_pct) || is.na(input$mff_split_pct) ||
@@ -225,6 +239,9 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
         !is.null(input$upload),
         !is.null(input$speciality_id),
         input$speciality_id != "",
+        !is.null(input$mff_rate),
+        !is.na(input$mff_rate),
+        input$mff_rate > 0,
         !isTRUE(input$mff_split_enabled) ||
           (!is.null(input$mff_split_pct) && !is.na(input$mff_split_pct) &&
              input$mff_split_pct >= 0 && input$mff_split_pct <= 1)
@@ -243,6 +260,7 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
           edge_id = input$edge_id,
           original_filename = input$upload$name,
           speciality_id = as.integer(input$speciality_id),
+          mff_rate = as.numeric(input$mff_rate),
           mff_split_enabled = isTRUE(input$mff_split_enabled),
           mff_split_pct = if (isTRUE(input$mff_split_enabled)) as.numeric(input$mff_split_pct) else 0
         )
@@ -432,8 +450,8 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
         DBI::dbExecute(CON,
                      "INSERT INTO meta_data 
    (cpms_id, study_site, scenario_id, edge_id, study_name, notes, uploaded_by, 
-    original_filename, saved_file_path, speciality_id, mff_split_enabled, mff_split_pct)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    original_filename, saved_file_path, speciality_id, mff_rate, mff_split_enabled, mff_split_pct)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      params = list(
                        sanitize_text_value(as.character(extracted_cpms)),
                        sanitize_text_value(input$study_site),
@@ -445,6 +463,7 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
                        sanitize_text_value(original_name),
                        sanitize_text_value(saved_path),
                        as.integer(input$speciality_id),
+                       as.numeric(input$mff_rate),
                        isTRUE(input$mff_split_enabled),
                        if (isTRUE(input$mff_split_enabled)) as.numeric(input$mff_split_pct) else 0
                      )
@@ -575,6 +594,7 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       shared_state$study_site       <- input$study_site
       shared_state$include_screening_failure <- isTRUE(input$include_screening_failure)
       shared_state$screening_failure_arm <- if (!is.na(selected_screening_arm)) selected_screening_arm else NULL
+      shared_state$mff_rate <- as.numeric(input$mff_rate)
       shared_state$mff_split_enabled <- isTRUE(input$mff_split_enabled)
       shared_state$mff_split_pct <- if (isTRUE(input$mff_split_enabled)) as.numeric(input$mff_split_pct) else 0
       shared_state$speciality_id    <- sp_id
@@ -583,6 +603,7 @@ step1_Server <- function(id, auth_state, shared_state, current_step) {
       shared_state$upload_meta      <- list(
         scenario_id     = input$scenario,
         study_site      = input$study_site,
+        mff_rate        = as.numeric(input$mff_rate),
         mff_split_enabled = isTRUE(input$mff_split_enabled),
         mff_split_pct   = if (isTRUE(input$mff_split_enabled)) as.numeric(input$mff_split_pct) else 0,
         include_screening_failure = isTRUE(input$include_screening_failure),
