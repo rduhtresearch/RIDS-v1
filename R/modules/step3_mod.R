@@ -198,7 +198,7 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
           cfg <- DBI::dbGetQuery(
             CON,
             paste(
-              "SELECT mff_split_enabled, mff_split_pct",
+              "SELECT mff_rate, mff_split_enabled, mff_split_pct",
               "FROM meta_data",
               "WHERE cpms_id = ? AND study_site = ? AND scenario_id = ?",
               "LIMIT 1"
@@ -211,9 +211,10 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
           )
 
           if (nrow(cfg) == 0) {
-            list(mff_split_enabled = FALSE, mff_split_pct = 0)
+            list(mff_rate = 1.08, mff_split_enabled = FALSE, mff_split_pct = 0)
           } else {
             list(
+              mff_rate = as.numeric(cfg$mff_rate[[1]] %||% 1.08),
               mff_split_enabled = isTRUE(cfg$mff_split_enabled[[1]]),
               mff_split_pct = as.numeric(cfg$mff_split_pct[[1]] %||% 0)
             )
@@ -246,6 +247,7 @@ step3_Server <- function(id, auth_state, shared_state, current_step) {
             prepared_df = working_data$df,
             rules_db_path = DB_DIR,
             scenario_id = shared_state$scenario_id,
+            mff_rate = study_mff_config$mff_rate,
             mff_split_enabled = study_mff_config$mff_split_enabled,
             mff_split_pct = study_mff_config$mff_split_pct
           )
